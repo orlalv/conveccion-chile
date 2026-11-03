@@ -1,9 +1,13 @@
 name: Actualizar visor
 
+# Funciona en cadena: cada ejecución procesa la imagen más reciente, publica la página,
+# espera hasta completar ~10 minutos y deja lanzada la siguiente.
+# El horario (cron) es solo un respaldo para reiniciar la cadena si alguna vez se corta.
+
 on:
+  workflow_dispatch:
   schedule:
-    - cron: "*/10 * * * *"     # cada 10 minutos (GitHub puede atrasarse algunos minutos)
-  workflow_dispatch:            # botón "Run workflow" para ejecutarlo a mano
+    - cron: "7,37 * * * *"
   push:
     branches: [main]
 
@@ -11,6 +15,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  actions: write
 
 concurrency:
   group: visor
@@ -19,11 +24,14 @@ concurrency:
 jobs:
   actualizar:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      - name: Anotar hora de inicio
+        run: echo "INICIO=$(date +%s)" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
@@ -53,3 +61,18 @@ jobs:
       - name: Publicar
         id: deploy
         uses: actions/deploy-pages@v4
+
+      - name: Programar la siguiente ejecución
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          transcurrido=$(( $(date +%s) - INICIO ))
+          espera=$(( 570 - transcurrido ))
+          if [ $espera -gt 0 ]; then echo "Esperando $espera s"; sleep $espera; fi
+          # ¿ya hay otra ejecución esperando? entonces no se lanza una más
+          en_cola=$(gh run list -R "$GITHUB_REPOSITORY" -w actualizar.yml -s queued --json databaseId -q 'length')
+          pendiente=$(gh run list -R "$GITHUB_REPOSITORY" -w actualizar.yml -s pending --json databaseId -q 'length')
+          if [ "$en_cola" != "0" ] || [ "$pendiente" != "0" ]; then echo "Ya hay una ejecución en cola."; exit 0; fi
+          gh workflow run actualizar.yml -R "$GITHUB_REPOSITORY" --ref main
+          echo "Siguiente ejecución lanzada."

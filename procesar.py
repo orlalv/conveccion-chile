@@ -362,13 +362,13 @@ def seguir(celdas, previas, dt_min, sig_id, t_iso):
             c["id"] = p["id"]
             dT = (c["tmin"] - p["tmin"]) * 10.0 / dt_min
             dA = (c["area"] - p["area"]) / max(p["area"], 1) * 10.0 / dt_min
-            c["dT10"] = round(dT, 1)
+            c["dT10"] = round(dT, 1); c["dA10"] = int(round(dA * 100))
             c["tendencia"] = "creciendo" if (dT <= -2 or dA >= 0.25) else "disipando" if (dT >= 2 or dA <= -0.25) else "estable"
-            c["traza"] = (p.get("traza") or [])[-11:] + [[c["lat"], c["lon"], t_iso]]
+            c["traza"] = (p.get("traza") or [])[-11:] + [[c["lat"], c["lon"], t_iso, c["tmin"], c["area"], c["rayos"]]]
         else:
             c["id"] = sig_id; sig_id += 1
-            c["tendencia"] = "nueva"; c["dT10"] = None
-            c["traza"] = [[c["lat"], c["lon"], t_iso]]
+            c["tendencia"] = "nueva"; c["dT10"] = None; c["dA10"] = None
+            c["traza"] = [[c["lat"], c["lon"], t_iso, c["tmin"], c["area"], c["rayos"]]]
     return sig_id
 
 

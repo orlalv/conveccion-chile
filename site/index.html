@@ -64,13 +64,21 @@ aside{border-left:1px solid var(--line);background:var(--panel);display:flex;fle
 .lista{flex:1 1 auto;overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
 .grupo{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.14em;margin:8px 4px 0}
 .cel{display:grid;grid-template-columns:4px 1fr auto;gap:0 10px;background:var(--panel2);border:1px solid var(--line);padding:9px 10px 9px 0;cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%}
+.cel .tend{font:inherit;font-family:var(--mono);font-size:12px;background:none;border:1px solid transparent;padding:1px 5px;cursor:pointer;align-self:start;white-space:nowrap}
+.cel .tend:hover,.cel .tend.abierta{border-color:currentColor}
+.graf{grid-column:2/4;margin-top:8px;border-top:1px solid var(--line);padding-top:8px;cursor:default}
+.graf svg{width:100%;height:auto;display:block}
+.graf svg text{font-family:var(--mono);font-size:10px;fill:var(--muted)}
+.graf p{margin:6px 0 0;font-size:12.5px;line-height:1.45;color:var(--fg)}
+.graf p small{color:var(--muted);font-size:12px}
+.graf .ley{display:flex;gap:12px;font-size:11px;color:var(--muted);margin-top:4px;flex-wrap:wrap}
+.graf .ley i{display:inline-block;width:12px;height:3px;vertical-align:middle;margin-right:4px}
 .cel:hover{border-color:var(--muted)}
 .cel.sel{border-color:var(--fg)}
 .cel i{grid-row:1/4;background:var(--c)}
 .cel .t{font-weight:600;color:var(--c);font-size:15px}
 .cel .lg{font-size:14px}
 .cel .d{grid-column:2/4;font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:3px}
-.cel .tend{font-family:var(--mono);font-size:12px;align-self:start;white-space:nowrap}
 .tend.creciendo{color:var(--cb)} .tend.disipando{color:var(--ok)} .tend.estable,.tend.nueva{color:var(--muted)}
 .cel.tenue{opacity:.62}
 .vacio{color:var(--muted);font-size:14px;padding:8px 4px;line-height:1.45}
@@ -292,7 +300,47 @@ function visible(c){
 }
 
 /* ---------- Estado ---------- */
-let datos = null, idx = 0, sel = null, play = TV, tPlay = null, verAltas = false;
+let datos = null, idx = 0, sel = null, play = TV, tPlay = null, verAltas = false, grafAbierta = null;
+
+/* Minigráfica de la evolución de una celda: tope mínimo, área y rayos */
+function grafico(c){
+  const h = (c.traza||[]).filter(p=>p.length>=5);
+  const fmt = (v,d=1)=>(v>0?"+":"")+v.toFixed(d).replace(".",",");
+  let expl;
+  if (c.tendencia==="nueva" || c.dT10==null){
+    expl = `<p>Celda <b>nueva</b>: aparece por primera vez en esta imagen, así que aún no hay con qué compararla.</p>`;
+  } else {
+    const rT = c.dT10<=-2 ? "el tope se enfrió más de 2 °C" : c.dT10>=2 ? "el tope se calentó más de 2 °C" : null;
+    const rA = c.dA10>=25 ? "el área creció más de 25 %" : c.dA10<=-25 ? "el área se redujo más de 25 %" : null;
+    const por = [rT,rA].filter(Boolean).join(" y ");
+    expl = `<p>Tope mínimo: <b>${fmt(c.dT10)} °C</b> en 10 min <small>(umbral ±2 °C)</small><br>
+      Área: <b>${c.dA10!=null?fmt(c.dA10,0)+" %":"s/d"}</b> en 10 min <small>(umbral ±25 %)</small><br>
+      → <b>${c.tendencia}</b>${por?` porque ${por}.`:": ningún cambio supera los umbrales."}</p>`;
+  }
+  if (h.length < 2) return expl + `<p><small>La gráfica aparece desde la segunda imagen en que se sigue esta celda.</small></p>`;
+  const W=280, H=96, iz=34, de=8, ar=8, ab=18, n=h.length;
+  const x = i => iz + (W-iz-de) * (n===1?0:i/(n-1));
+  const ts = h.map(p=>p[3]), as = h.map(p=>p[4]), rs = h.map(p=>p[5]||0);
+  const tmin = Math.min(...ts)-1, tmax = Math.max(...ts)+1;
+  const yT = v => ar + (H-ar-ab) * (v - tmin)/(tmax - tmin);            // más frío = más arriba
+  const amax = Math.max(...as)*1.1, yA = v => ar + (H-ar-ab) * (1 - v/amax);
+  const rmax = Math.max(1,...rs);
+  const linea = (f, arr) => arr.map((v,i)=>`${i?"L":"M"}${x(i).toFixed(1)},${f(v).toFixed(1)}`).join(" ");
+  const barras = rs.map((r,i)=> r>0 ? `<rect x="${(x(i)-3).toFixed(1)}" y="${(H-ab-r/rmax*22).toFixed(1)}" width="6" height="${(r/rmax*22).toFixed(1)}" fill="${css("--rayo")}" opacity=".55"/>` : "").join("");
+  const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolución del tope mínimo y el área">
+    <line x1="${iz}" x2="${W-de}" y1="${H-ab}" y2="${H-ab}" stroke="${css("--line")}"/>
+    ${barras}
+    <path d="${linea(yA, as)}" fill="none" stroke="${css("--front")}" stroke-width="1.6" stroke-dasharray="4 3"/>
+    <path d="${linea(yT, ts)}" fill="none" stroke="${css("--cb")}" stroke-width="2"/>
+    ${ts.map((v,i)=>`<circle cx="${x(i).toFixed(1)}" cy="${yT(v).toFixed(1)}" r="${i===n-1?3.2:2}" fill="${css("--cb")}"/>`).join("")}
+    <text x="${iz-4}" y="${(yT(ts[0])+3).toFixed(1)}" text-anchor="end">${ts[0].toFixed(0)}°</text>
+    <text x="${(x(n-1)-6).toFixed(1)}" y="${Math.max(10, yT(ts[n-1])+4).toFixed(1)}" text-anchor="end">${ts[n-1].toFixed(0)}°</text>
+    <text x="${iz}" y="${H-4}">${h[0][2]}</text>
+    <text x="${W-de}" y="${H-4}" text-anchor="end">${h[n-1][2]} UTC</text>
+  </svg>`;
+  const ley = `<div class="ley"><span><i style="background:${css("--cb")}"></i>tope mínimo (°C, más frío arriba)</span><span><i style="background:${css("--front")}"></i>área</span><span><i style="background:${css("--rayo")}"></i>rayos</span></div>`;
+  return svg + ley + expl;
+}
 const cache = {};
 const hhmm = (iso, tz) => new Date(iso.replace("Z",":00Z")).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:tz});
 const textoArea = a => a>=10000 ? (a/1000).toFixed(0)+" mil km²" : a.toLocaleString("es-CL")+" km²";
@@ -401,13 +449,19 @@ function listar(){
   if (!f.rayos) sub.textContent += " Rayos GLM no disponibles en esta imagen.";
 
   const fila = c=>{
-    const b = document.createElement("button");
-    b.type="button"; b.className = "cel"+(c.region!=="chile"?" tenue":"")+(sel===c.id?" sel":"");
+    const b = document.createElement("div");
+    b.className = "cel"+(c.region!=="chile"?" tenue":"")+(sel===c.id?" sel":"");
+    b.tabIndex = 0; b.setAttribute("role","button");
     b.style.setProperty("--c", `var(${TIPOS[c.tipo].c})`);
+    const abierta = grafAbierta===c.id;
     b.innerHTML = `<i></i><span><span class="t">${TIPOS[c.tipo].n}</span> <span class="lg">· ${c.lugar}</span></span>
-      <span class="tend ${c.tendencia||""}">${TEND[c.tendencia]||""}</span>
-      <span class="d">${c.tmin} °C · ${textoRayos(c.rayos)} · ${textoArea(c.area)}${c.tipo.startsWith("frontal")?` · ${c.largo} km`:""}</span>`;
-    b.onclick = ()=>{ if (sel===c.id) cerrarFoco(); else { abrirFoco(c.id); P.mapa.panTo([c.lat,c.lon]); } };
+      <button type="button" class="tend ${c.tendencia||""}${abierta?" abierta":""}" aria-expanded="${abierta}" title="Ver por qué">${TEND[c.tendencia]||""}</button>
+      <span class="d">${c.tmin} °C · ${textoRayos(c.rayos)} · ${textoArea(c.area)}${c.tipo.startsWith("frontal")?` · ${c.largo} km`:""}</span>
+      ${abierta ? `<div class="graf">${grafico(c)}</div>` : ""}`;
+    const ir = ()=>{ if (sel===c.id) cerrarFoco(); else { abrirFoco(c.id); P.mapa.panTo([c.lat,c.lon]); } };
+    b.onclick = e=>{ if (e.target.closest(".graf")) return; ir(); };
+    b.onkeydown = e=>{ if ((e.key==="Enter"||e.key===" ") && e.target===b){ e.preventDefault(); ir(); } };
+    b.querySelector(".tend").onclick = e=>{ e.stopPropagation(); grafAbierta = abierta ? null : c.id; listar(); };
     box.appendChild(b);
   };
   const principales = chile.filter(c=>c.tipo!=="alta"), altas = chile.filter(c=>c.tipo==="alta");
@@ -420,7 +474,6 @@ function listar(){
     if (verAltas) altas.forEach(fila);
   }
   if (!chile.length) box.insertAdjacentHTML("beforeend",`<div class="vacio">No hay nubes de tope frío (−40 °C o menos) sobre Chile ni en el Pacífico cercano.</div>`);
-  if (vecinos.length){ box.insertAdjacentHTML("beforeend",`<div class="grupo">Argentina y países vecinos</div>`); vecinos.forEach(fila); }
   if (lejos.length){ box.insertAdjacentHTML("beforeend",`<div class="grupo">Pacífico lejano</div>`); lejos.forEach(fila); }
 }
 
