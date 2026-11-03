@@ -67,9 +67,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          transcurrido=$(( $(date +%s) - INICIO ))
-          espera=$(( 570 - transcurrido ))
-          if [ $espera -gt 0 ]; then echo "Esperando $espera s"; sleep $espera; fi
+          # La NOAA publica cada imagen ~10 min después de que empieza el barrido (:00, :10, :20…).
+          # Se espera hasta el próximo minuto terminado en 1 (más 20 s) para tomar la imagen apenas aparece.
+          ahora=$(date +%s)
+          objetivo=$(( (ahora / 600 + 1) * 600 + 80 ))
+          if [ $(( objetivo - ahora )) -lt 240 ]; then objetivo=$(( objetivo + 600 )); fi
+          espera=$(( objetivo - ahora - 30 ))
+          echo "Esperando $espera s"; sleep $espera
           # ¿ya hay otra ejecución esperando? entonces no se lanza una más
           en_cola=$(gh run list -R "$GITHUB_REPOSITORY" -w actualizar.yml -s queued --json databaseId -q 'length')
           pendiente=$(gh run list -R "$GITHUB_REPOSITORY" -w actualizar.yml -s pending --json databaseId -q 'length')
