@@ -452,9 +452,87 @@ def procesar_escena(T, rayos, t, prev, LON, LAT, px_km, mascs, dir_datos):
             "umbral": UMBRAL, "sig_id": sig, "frames": frames,
             "lugares": [[n, la, lo, "CL"] for n, la, lo in LUGARES] + [[n, la, lo, "X"] for n, la, lo in VECINOS]}
 
+# ---------------- Análisis de horas específicas ----------------
+def analizar(horas, LON, LAT, px_km, mascs, dir_out, punto=("Santiago", -33.45, -70.67), radio_km=60.0):
+    """Procesa imágenes de horas puntuales (UTC) y deja un informe y recortes de la zona central."""
+    from PIL import ImageDraw
+    os.makedirs(dir_out, exist_ok=True)
+    alto = LON.shape[0]
+    informe = []
+    previas, prev_t = [], None
+    for h in horas:
+        t0 = datetime.strptime(h, "%Y-%m-%dT%H:%M").replace(tzinfo=timezone.utc)
+        lista = archivos("ABI-L2-CMIPF", "M6C13_G19", t0 - timedelta(minutes=6), t0 + timedelta(minutes=6))
+        if not lista:
+            informe.append(f"\n### {h} UTC\nNo se encontró imagen."); continue
+        t, clave = min(lista, key=lambda x: abs((x[0] - t0).total_seconds()))
+        t = t.replace(second=0, microsecond=0)
+        T = banda13(bajar(clave), LON, LAT)
+        rayos = rayos_glm(t)
+        m_chile, m_tierra, zona, m_pais, nombres = mascs
+        celdas = detectar(T, LON, LAT, px_km, m_chile, m_tierra, zona, rayos, m_pais, nombres)
+        dt = (t - prev_t).total_seconds() / 60 if prev_t else 0
+        seguir(celdas, previas, dt, 1000, t.strftime("%H:%M")); previas, prev_t = celdas, t
+        # diagnóstico alrededor del punto
+        nom, plat, plon = punto
+        d = 2 * R_TIERRA * np.arcsin(np.sqrt(np.sin(np.radians(LAT - plat) / 2) ** 2 + np.cos(np.radians(plat)) * np.cos(np.radians(LAT)) * np.sin(np.radians(LON - plon) / 2) ** 2))
+        cerca = d <= radio_km
+        Tc = T[cerca]
+        n_ray = 0
+        if rayos is not None and len(rayos[0]):
+            la, lo = rayos
+            dd = 2 * R_TIERRA * np.arcsin(np.sqrt(np.sin(np.radians(la - plat) / 2) ** 2 + np.cos(np.radians(plat)) * np.cos(np.radians(la)) * np.sin(np.radians(lo - plon) / 2) ** 2))
+            n_ray = int((dd <= radio_km).sum())
+        hl = t.astimezone(timezone(timedelta(hours=-3))).strftime("%H:%M")
+        r = [f"\n### {t:%H:%M} UTC ({hl} Chile) — {clave.split('/')[-1][:40]}…",
+             f"En {radio_km:.0f} km alrededor de {nom}: tope mínimo {np.nanmin(Tc):.1f} °C · "
+             f"percentil 10: {np.nanpercentile(Tc,10):.1f} °C · mediana {np.nanmedian(Tc):.1f} °C · "
+             f"píxeles ≤ −40 °C: {100*np.mean(Tc<=-40):.0f} % · ≤ −20 °C: {100*np.mean(Tc<=-20):.0f} % · "
+             f"rayos GLM: {n_ray if rayos is not None else 's/d'}"]
+        cz = [c for c in celdas if c["region"] == "chile" and -38.5 <= c["lat"] <= -29.5]
+        if cz:
+            r.append("Objetos detectados en la zona central (−29,5° a −38,5°):")
+            for c in sorted(cz, key=lambda c: c["tmin"]):
+                r.append(f"- {c['tipo']} · {c['lugar']} · tope mín {c['tmin']} °C · medio {c['tmed']} °C · desv {c['desv']} · "
+                         f"{c['area']} km² · rayos {c['rayos']} · {c.get('tendencia')} ({c.get('dT10')} °C/10 min)")
+        else:
+            r.append("Ningún objeto con tope ≤ −40 °C en la zona central.")
+        informe += r
+        # recorte de la zona central con contornos y rayos
+        ym0, ym1 = merc_y(LAT_MIN), merc_y(LAT_MAX)
+        fila = lambda la_: int((ym1 - merc_y(la_)) / (ym1 - ym0) * alto)
+        col = lambda lo_: int((lo_ - LON_MIN) / (LON_MAX - LON_MIN) * ANCHO)
+        f0, f1, c0, c1 = fila(-29.5), fila(-38.0), col(-75.0), col(-68.5)
+        img = Image.fromarray(colorear(T)[f0:f1, c0:c1]).convert("RGB")
+        k = 5; img = img.resize((img.width * k, img.height * k), Image.NEAREST)
+        dr = ImageDraw.Draw(img)
+        X = lambda lo_: (col(lo_) - c0) * k; Y = lambda la_: (fila(la_) - f0) * k
+        for cel in cz:
+            colr = {"cb": (255, 90, 95), "sistema": (255, 90, 95), "frontal_conv": (255, 159, 67), "moderada": (242, 180, 65),
+                    "frontal": (92, 200, 230), "alta": (169, 184, 255)}[cel["tipo"]]
+            for anillo in cel["contorno"]:
+                dr.line([(X(p[1]), Y(p[0])) for p in anillo] + [(X(anillo[0][1]), Y(anillo[0][0]))], fill=colr, width=3)
+        if rayos is not None:
+            for la_, lo_ in zip(*rayos):
+                if -38 <= la_ <= -29.5 and -75 <= lo_ <= -68.5:
+                    dr.ellipse([X(lo_) - 4, Y(la_) - 4, X(lo_) + 4, Y(la_) + 4], outline=(200, 235, 255), width=2)
+        for n_, la_, lo_ in LUGARES:
+            if -38 <= la_ <= -29.5 and -75 <= lo_ <= -68.5:
+                dr.ellipse([X(lo_) - 3, Y(la_) - 3, X(lo_) + 3, Y(la_) + 3], fill=(255, 255, 255))
+                dr.text((X(lo_) + 6, Y(la_) - 6), n_, fill=(255, 255, 255))
+        rr = radio_km / 111.0
+        dr.ellipse([X(plon - rr / math.cos(math.radians(plat))), Y(plat + rr), X(plon + rr / math.cos(math.radians(plat))), Y(plat - rr)], outline=(255, 255, 0), width=2)
+        dr.text((10, 10), f"GOES-19 banda 13 · {t:%Y-%m-%d %H:%M} UTC ({hl} Chile)", fill=(255, 255, 255))
+        img.save(os.path.join(dir_out, f"centro_{t:%H%M}.png"))
+    texto = "\n".join(informe)
+    open(os.path.join(dir_out, "informe.md"), "w").write(texto)
+    print(texto)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--demo", action="store_true")
+    ap.add_argument("--analisis", nargs="+", metavar="AAAA-MM-DDTHH:MM", help="horas UTC a analizar")
     ap.add_argument("--sitio-url", default=os.environ.get("SITIO_URL", ""))
     ap.add_argument("--salida", default=os.path.join(BASE, "site", "data"))
     a = ap.parse_args()
@@ -462,6 +540,10 @@ def main():
     LON, LAT, px_km, alto = grilla()
     mascs = mascaras(LON, LAT, px_km)
     print(f"Grilla {ANCHO}x{alto}")
+
+    if a.analisis:
+        analizar(a.analisis, LON, LAT, px_km, mascs, os.path.join(BASE, "analisis"))
+        return
 
     if a.demo:
         prev = None
