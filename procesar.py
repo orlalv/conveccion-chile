@@ -112,7 +112,13 @@ def mascaras(LON, LAT, px_km):
         m_tierra |= contains_xy(p, LON, LAT)
     dist_px = ndimage.distance_transform_edt(~m_chile)
     dist_km = dist_px * px_km[:, None]
-    zona = m_chile | (~m_tierra & (dist_km <= ZONA_MAR_KM))
+    # solo el lado del Pacífico: oeste del punto más oriental de Chile en cada fila
+    cols = np.arange(m_chile.shape[1])[None, :]
+    borde = np.where(m_chile.any(1), np.where(m_chile, cols, -1).max(1), -1).astype(float)
+    filas = np.arange(m_chile.shape[0]); ok = borde >= 0
+    borde = np.interp(filas, filas[ok], borde[ok])
+    pacifico = cols <= borde[:, None]
+    zona = m_chile | (~m_tierra & pacifico & (dist_km <= ZONA_MAR_KM))
     return m_chile, m_tierra, zona
 
 
@@ -275,18 +281,25 @@ def detectar(T, LON, LAT, px_km, m_chile, m_tierra, zona, rayos):
         r0, c0 = yy[frio].mean() + sl[0].start, xx[frio].mean() + sl[1].start
         tierra_n = bool(m_tierra[int(r0), int(c0)]); chile_n = bool(m_chile[sl][m].any())
         # clasificación
-        frontal = razon >= 3.0 and largo >= 350
-        rayo_ok = (ry or 0)
-        if frontal:
-            tipo = "frontal_conv" if (rayo_ok >= 5 or (tmin <= -60 and desv >= 4)) else "frontal"
-        elif tmin <= -55 and (rayo_ok >= 2 or desv >= 3.5):
-            tipo = "cb"
+        rayo_ok = ry or 0
+        hay_glm = ry is not None
+        grande = area >= 25000
+        alargada = razon >= 3.0 and largo >= 350
+        if grande or alargada:
+            if rayo_ok >= 5:
+                tipo = "frontal_conv" if alargada else "sistema"
+            elif not hay_glm and tmin <= -60 and desv >= 4:
+                tipo = "frontal_conv"
+            else:
+                tipo = "frontal"
         elif rayo_ok >= 2:
             tipo = "cb"
-        elif desv < 2.5 and rayo_ok == 0 and tmin > -55:
-            tipo = "alta"
-        else:
+        elif not hay_glm and tmin <= -55 and desv >= 3.5:
+            tipo = "cb"
+        elif tmin <= -50 and desv >= 3.0:
             tipo = "moderada"
+        else:
+            tipo = "alta"
         # contorno
         sub = np.pad(m.astype("f4"), 1)
         polis = []
@@ -407,7 +420,8 @@ def procesar_escena(T, rayos, t, prev, LON, LAT, px_km, mascs, dir_datos):
             os.remove(os.path.join(dir_datos, "frames", arch))
     return {"generado": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),
             "limites": [[LAT_MIN, LON_MIN], [LAT_MAX, LON_MAX]],
-            "umbral": UMBRAL, "sig_id": sig, "frames": frames}
+            "umbral": UMBRAL, "sig_id": sig, "frames": frames,
+            "lugares": [[n, la, lo] for n, la, lo in LUGARES]}
 
 def main():
     ap = argparse.ArgumentParser()

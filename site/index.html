@@ -74,10 +74,14 @@ footer a{color:var(--muted)}
 /* etiquetas sobre el mapa */
 .leaflet-tooltip.etq{background:rgba(10,15,19,.9);border:1px solid var(--c);color:var(--fg);font-family:var(--mono);font-size:12px;padding:2px 6px;border-radius:0;box-shadow:none;white-space:nowrap}
 .leaflet-tooltip.etq::before{display:none}
-.t-cb{--c:var(--cb)} .t-moderada{--c:var(--mod)} .t-frontal_conv{--c:var(--fconv)}
+.t-cb,.t-sistema{--c:var(--cb)} .t-moderada{--c:var(--mod)} .t-frontal_conv{--c:var(--fconv)}
 .leaflet-tooltip.etq b{color:var(--c);font-weight:500}
 .leaflet-tooltip.info{background:#0a0f13;border:1px solid var(--line);color:var(--fg);font-family:var(--ui);font-size:13px;border-radius:0;box-shadow:none;line-height:1.45}
 .leaflet-container{font-family:var(--ui)}
+.leaflet-tooltip.lugar{background:none;border:0;box-shadow:none;color:#dfe8ec;font-size:12px;padding:0;text-shadow:0 0 3px #000,0 0 3px #000,0 0 2px #000}
+.leaflet-tooltip.lugar::before{display:none}
+.plegado{font:inherit;font-size:13px;color:var(--muted);background:none;border:1px dashed var(--line);padding:8px 10px;text-align:left;cursor:pointer;width:100%}
+.plegado:hover{border-color:var(--muted)}
 .leaflet-control-attribution{background:rgba(10,15,19,.75)!important;color:var(--dim)!important}
 .leaflet-control-attribution a{color:var(--muted)!important}
 .leaflet-bar a{background:var(--panel)!important;color:var(--fg)!important;border-color:var(--line)!important}
@@ -142,6 +146,7 @@ body.tv .tiempo button,body.tv .capas{display:none}
 <script>
 const TIPOS = {
   cb:           {n:"CB",                     c:"--cb",    orden:0},
+  sistema:      {n:"Sistema convectivo",     c:"--cb",    orden:0},
   frontal_conv: {n:"Frontal con convección", c:"--fconv", orden:1},
   moderada:     {n:"Convección moderada",    c:"--mod",   orden:2},
   frontal:      {n:"Banda frontal",          c:"--front", orden:3},
@@ -157,10 +162,20 @@ const mapa = L.map("mapa", {zoomControl:true, attributionControl:true, minZoom:3
 mapa.createPane("satelite"); mapa.getPane("satelite").style.zIndex = 350;
 mapa.createPane("bordes");   mapa.getPane("bordes").style.zIndex = 380; mapa.getPane("bordes").style.pointerEvents = "none";
 mapa.createPane("nombres");  mapa.getPane("nombres").style.zIndex = 390; mapa.getPane("nombres").style.pointerEvents = "none";
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
-  {subdomains:"abcd", maxZoom:12, attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © <a href="https://carto.com/attributions">CARTO</a> · NOAA GOES-19'}).addTo(mapa);
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png",
-  {subdomains:"abcd", maxZoom:12, pane:"nombres", opacity:.85}).addTo(mapa);
+mapa.attributionControl.setPrefix(false);
+mapa.attributionControl.addAttribution('NOAA GOES-19 · Límites: Natural Earth · <a href="https://leafletjs.com">Leaflet</a>');
+const capaLugares = L.layerGroup().addTo(mapa);
+function pintarLugares(){
+  capaLugares.clearLayers();
+  if (!datos || !datos.lugares) return;
+  const z = mapa.getZoom();
+  const MAYORES = ["Arica","Iquique","Antofagasta","Copiapó","La Serena","Valparaíso","Santiago","Rancagua","Talca","Concepción","Temuco","Puerto Montt","Coyhaique","Punta Arenas","Calama","Chillán","Valdivia","Juan Fernández"];
+  datos.lugares.forEach(([n,la,lo])=>{
+    if (z < 5.5 && !MAYORES.includes(n)) return;
+    L.circleMarker([la,lo],{radius:2.5,color:"#e4ecf0",weight:0,fillOpacity:.9,pane:"nombres",interactive:false}).addTo(capaLugares)
+     .bindTooltip(n,{permanent:true,direction:"right",offset:[4,0],className:"lugar",pane:"nombres"});
+  });
+}
 mapa.fitBounds([[-56,-80],[-17,-66]]);
 
 fetch("geo/paises.geojson").then(r=>r.json()).then(g=>{
@@ -186,7 +201,8 @@ const capasBox = document.getElementById("capas");
 });
 
 /* ---------- Estado ---------- */
-let datos = null, idx = 0, sel = null, play = TV, tPlay = null;
+let datos = null, idx = 0, sel = null, play = TV, tPlay = null, verAltas = false;
+mapa.on("zoomend", pintarLugares);
 const cache = {};
 
 function hhmm(iso, tz){
@@ -223,10 +239,10 @@ function pintar(){
         {className:"info", sticky:true});
       pol.on("click",()=>{ sel=c.id; pintar(); listar(); });
     });
-    if (!c.lejano && (c.tipo==="cb" || c.tipo==="frontal_conv" || c.tipo==="moderada")){
+    if (!c.lejano && (c.tipo==="cb" || c.tipo==="sistema" || c.tipo==="frontal_conv" || c.tipo==="moderada")){
       const flecha = {creciendo:"↑",disipando:"↓",estable:"→",nueva:"•"}[c.tendencia]||"";
       L.marker([c.lat,c.lon],{opacity:0,interactive:false}).addTo(capaCeldas)
-       .bindTooltip(`<b>${c.tipo==="cb"?"CB":c.tipo==="moderada"?"Mod.":"F+C"}</b> ${c.tmin}° ${flecha}`,
+       .bindTooltip(`<b>${c.tipo==="cb"?"CB":c.tipo==="sistema"?"SCM":c.tipo==="moderada"?"Mod.":"F+C"}</b> ${c.tmin}° ${flecha}`,
          {permanent:true, direction:"right", offset:[8,0], className:"etq t-"+c.tipo});
     }
     if (VIS.trazas && c.traza && c.traza.length>1)
@@ -242,7 +258,7 @@ function listar(){
   const box = document.getElementById("lista"); box.innerHTML = "";
   const cerca = f.celdas.filter(c=>!c.lejano).sort((a,b)=>TIPOS[a.tipo].orden-TIPOS[b.tipo].orden || a.tmin-b.tmin);
   const lejos = f.celdas.filter(c=>c.lejano);
-  const cbs = cerca.filter(c=>c.tipo==="cb"||c.tipo==="frontal_conv");
+  const cbs = cerca.filter(c=>c.tipo==="cb"||c.tipo==="sistema"||c.tipo==="frontal_conv");
   const est = document.getElementById("estado"), sub = document.getElementById("estadoSub");
   if (cbs.length){ est.className="estado alerta"; est.textContent = `${cbs.length} ${cbs.length===1?"núcleo convectivo":"núcleos convectivos"} activo${cbs.length===1?"":"s"}`; }
   else if (cerca.some(c=>c.tipo==="moderada")){ est.className="estado aviso"; est.textContent="Convección moderada, sin CB"; }
@@ -260,8 +276,16 @@ function listar(){
     b.onclick = ()=>{ sel=c.id; idx=datos.frames.length-1; detener(); mapa.flyTo([c.lat,c.lon], Math.max(mapa.getZoom(),6), {duration:.6}); pintar(); listar(); };
     box.appendChild(b);
   };
-  if (cerca.length){ cerca.forEach(fila); }
-  else box.insertAdjacentHTML("beforeend",`<div class="vacio">No hay nubes de tope frío (−40 °C o menos) sobre Chile ni en el Pacífico cercano.</div>`);
+  const principales = cerca.filter(c=>c.tipo!=="alta"), altas = cerca.filter(c=>c.tipo==="alta");
+  principales.forEach(fila);
+  if (altas.length){
+    const b = document.createElement("button"); b.type="button"; b.className="plegado";
+    b.textContent = verAltas ? `Ocultar nubosidad alta (${altas.length})` : `+ ${altas.length} nube${altas.length===1?"":"s"} alta${altas.length===1?"":"s"} sin convección`;
+    b.onclick = ()=>{ verAltas=!verAltas; listar(); };
+    box.appendChild(b);
+    if (verAltas) altas.forEach(fila);
+  }
+  if (!cerca.length) box.insertAdjacentHTML("beforeend",`<div class="vacio">No hay nubes de tope frío (−40 °C o menos) sobre Chile ni en el Pacífico cercano.</div>`);
   if (lejos.length){ box.insertAdjacentHTML("beforeend",`<div class="grupo">Pacífico lejano</div>`); lejos.forEach(fila); }
 }
 
@@ -295,7 +319,7 @@ async function cargar(){
     datos = d;
     document.getElementById("rango").max = Math.max(0,datos.frames.length-1);
     if (estabaEnUltimo || idx>=datos.frames.length) idx = datos.frames.length-1;
-    precargar(); pintar(); listar(); edad();
+    precargar(); pintar(); listar(); edad(); pintarLugares();
     if (play) iniciar();
   }catch(e){
     const c=document.getElementById("chipImg"); c.className="chip warn"; c.textContent="Sin conexión con los datos";
