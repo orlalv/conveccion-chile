@@ -4,43 +4,54 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Convección Chile</title>
-<meta name="description" content="Detección de nubes convectivas sobre Chile con datos del GOES-19. Proyecto de Orlando Álvarez Bustamante.">
+<meta name="description" content="Detección de nubes convectivas sobre Chile y Argentina con datos del GOES-19. Proyecto de Orlando Álvarez Bustamante.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Sala de monitoreo: mapa a la izquierda, celdas activas a la derecha, línea de tiempo abajo del mapa */
+/* Sala de monitoreo: mapa grande con recuadro de foco, lista de celdas a la derecha, línea de tiempo abajo */
 :root{
   --bg:#0a0f13; --panel:#10171d; --panel2:#141d24; --line:#21303a; --fg:#e4ecf0; --muted:#89a0ad; --dim:#5d7280;
-  --cb:#ff5a5f; --fconv:#ff9f43; --mod:#f2b441; --alta:#a9b8ff; --front:#5cc8e6; --ok:#7fd99a; --accent:#5cc8e6;
+  --cb:#ff5a5f; --fconv:#ff9f43; --mod:#f2b441; --alta:#a9b8ff; --front:#5cc8e6; --ok:#7fd99a; --accent:#5cc8e6; --rayo:#9fdcff;
   --ui:"IBM Plex Sans Condensed","Arial Narrow",Arial,sans-serif; --mono:"IBM Plex Mono",Consolas,monospace;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--fg);font-family:var(--ui);font-size:15px;display:flex;flex-direction:column;overflow:hidden}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:6px 18px;padding:8px max(16px,env(safe-area-inset-left,0px)) 8px max(16px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line);flex:0 0 auto}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:6px 18px;padding:8px max(16px,env(safe-area-inset-right,0px)) 8px max(16px,env(safe-area-inset-left,0px));border-bottom:1px solid var(--line);flex:0 0 auto}
 .marca{display:flex;align-items:baseline;gap:10px}
-.marca h1{margin:0;font-size:clamp(18px,1.6vw,30px);font-weight:600;letter-spacing:.01em}
+.marca h1{margin:0;font-size:clamp(18px,1.6vw,30px);font-weight:600}
 .marca span{color:var(--muted);font-size:13px}
 .chip{font-family:var(--mono);font-size:12px;padding:2px 8px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
 .chip.warn{border-color:var(--mod);color:var(--mod)}
 .chip.demo{background:var(--mod);color:#1b1404;border-color:var(--mod);font-weight:500}
+.zonas{display:flex;gap:4px;flex-wrap:wrap}
+.zonas button{font:inherit;font-size:13px;background:transparent;color:var(--muted);border:1px solid var(--line);padding:3px 10px;cursor:pointer}
+.zonas button.on{background:var(--accent);border-color:var(--accent);color:#04161c;font-weight:600}
 .relojes{margin-left:auto;display:flex;gap:20px;font-family:var(--mono);font-variant-numeric:tabular-nums}
 .reloj{display:flex;flex-direction:column;align-items:flex-end;line-height:1.1}
 .reloj b{font-size:clamp(17px,1.7vw,32px);font-weight:500}
 .reloj small{font-size:10px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
 .reloj.utc b{color:var(--accent)}
 
-.cuerpo{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1fr) clamp(280px,23vw,420px);min-height:0}
+.cuerpo{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1fr) clamp(290px,23vw,430px);min-height:0}
 .mapa-col{display:flex;flex-direction:column;min-width:0;min-height:0}
-#mapa{flex:1 1 auto;background:#0d1418;min-height:0}
+.mapas{flex:1 1 auto;position:relative;min-height:0}
+#mapa{position:absolute;inset:0;background:#0d1418}
+.foco{position:absolute;right:12px;bottom:12px;width:min(36%,520px);height:min(46%,420px);min-width:260px;min-height:220px;z-index:900;border:1px solid var(--fg);background:#0d1418;display:flex;flex-direction:column;box-shadow:0 0 0 4px rgba(10,15,19,.7)}
+.foco[hidden]{display:none}
+.foco .barra{display:flex;align-items:baseline;gap:8px;padding:5px 9px;background:rgba(10,15,19,.92);border-bottom:1px solid var(--line);font-size:14px}
+.foco .barra small{color:var(--muted);font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.foco .barra b{color:var(--c,var(--fg));font-weight:600}
+.foco .barra span{color:var(--muted);font-family:var(--mono);font-size:12px;margin-left:auto}
+#mapaFoco{flex:1 1 auto;background:#0d1418}
 .tiempo{display:flex;align-items:center;gap:12px;padding:8px 14px;border-top:1px solid var(--line);background:var(--panel)}
 .tiempo button{font:inherit;background:var(--panel2);color:var(--fg);border:1px solid var(--line);width:36px;height:32px;cursor:pointer;display:grid;place-items:center}
 .tiempo button:hover{border-color:var(--accent)}
 .tiempo input[type=range]{flex:1;accent-color:var(--accent);min-width:80px}
 .tiempo .hora{font-family:var(--mono);font-size:14px;min-width:150px;text-align:right;font-variant-numeric:tabular-nums}
-button:focus-visible,input:focus-visible,label:focus-within{outline:2px solid var(--mod);outline-offset:1px}
+button:focus-visible,input:focus-visible{outline:2px solid var(--mod);outline-offset:1px}
 
 aside{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
 .resumen{padding:14px 16px 10px;border-bottom:1px solid var(--line)}
@@ -49,7 +60,7 @@ aside{border-left:1px solid var(--line);background:var(--panel);display:flex;fle
 .estado.ok{color:var(--ok)} .estado.alerta{color:var(--cb)} .estado.aviso{color:var(--mod)}
 .estado-sub{color:var(--muted);font-size:13px;margin-top:2px}
 .lista{flex:1 1 auto;overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
-.grupo{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.14em;margin:6px 4px 0}
+.grupo{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.14em;margin:8px 4px 0}
 .cel{display:grid;grid-template-columns:4px 1fr auto;gap:0 10px;background:var(--panel2);border:1px solid var(--line);padding:9px 10px 9px 0;cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%}
 .cel:hover{border-color:var(--muted)}
 .cel.sel{border-color:var(--fg)}
@@ -59,8 +70,10 @@ aside{border-left:1px solid var(--line);background:var(--panel);display:flex;fle
 .cel .d{grid-column:2/4;font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:3px}
 .cel .tend{font-family:var(--mono);font-size:12px;align-self:start;white-space:nowrap}
 .tend.creciendo{color:var(--cb)} .tend.disipando{color:var(--ok)} .tend.estable,.tend.nueva{color:var(--muted)}
-.cel.lejano{opacity:.62}
+.cel.tenue{opacity:.62}
 .vacio{color:var(--muted);font-size:14px;padding:8px 4px;line-height:1.45}
+.plegado{font:inherit;font-size:13px;color:var(--muted);background:none;border:1px dashed var(--line);padding:8px 10px;text-align:left;cursor:pointer;width:100%}
+.plegado:hover{border-color:var(--muted)}
 .capas{padding:10px 14px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px}
 .capas label{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--muted)}
 .capas input{accent-color:var(--accent)}
@@ -69,22 +82,20 @@ aside{border-left:1px solid var(--line);background:var(--panel);display:flex;fle
 .escala .barra{height:10px;background:linear-gradient(90deg,#d7d7d7 0 18%,#78cdf0 18%,#285fdc 34%,#28be5a 48%,#f0e13c 62%,#eb5a28 76%,#fff 90%,#8246aa)}
 .escala .marcas{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:3px}
 footer{padding:6px 14px 8px;border-top:1px solid var(--line);font-size:11px;color:var(--dim);line-height:1.5}
-footer a{color:var(--muted)}
 
-/* etiquetas sobre el mapa */
+.leaflet-container{font-family:var(--ui);background:#0d1418}
 .leaflet-tooltip.etq{background:rgba(10,15,19,.9);border:1px solid var(--c);color:var(--fg);font-family:var(--mono);font-size:12px;padding:2px 6px;border-radius:0;box-shadow:none;white-space:nowrap}
 .leaflet-tooltip.etq::before{display:none}
-.t-cb,.t-sistema{--c:var(--cb)} .t-moderada{--c:var(--mod)} .t-frontal_conv{--c:var(--fconv)}
 .leaflet-tooltip.etq b{color:var(--c);font-weight:500}
+.t-cb,.t-sistema{--c:var(--cb)} .t-moderada{--c:var(--mod)} .t-frontal_conv{--c:var(--fconv)}
 .leaflet-tooltip.info{background:#0a0f13;border:1px solid var(--line);color:var(--fg);font-family:var(--ui);font-size:13px;border-radius:0;box-shadow:none;line-height:1.45}
-.leaflet-container{font-family:var(--ui)}
 .leaflet-tooltip.lugar{background:none;border:0;box-shadow:none;color:#dfe8ec;font-size:12px;padding:0;text-shadow:0 0 3px #000,0 0 3px #000,0 0 2px #000}
+.leaflet-tooltip.lugar.x{color:#b5c2c9}
 .leaflet-tooltip.lugar::before{display:none}
-.plegado{font:inherit;font-size:13px;color:var(--muted);background:none;border:1px dashed var(--line);padding:8px 10px;text-align:left;cursor:pointer;width:100%}
-.plegado:hover{border-color:var(--muted)}
 .leaflet-control-attribution{background:rgba(10,15,19,.75)!important;color:var(--dim)!important}
 .leaflet-control-attribution a{color:var(--muted)!important}
 .leaflet-bar a{background:var(--panel)!important;color:var(--fg)!important;border-color:var(--line)!important}
+canvas.rayos{position:absolute;inset:0;pointer-events:none;z-index:450}
 
 body.tv{font-size:17px}
 body.tv .tiempo button,body.tv .capas{display:none}
@@ -92,17 +103,17 @@ body.tv .tiempo button,body.tv .capas{display:none}
 @media (max-width:860px){
   body{overflow:auto;height:auto}
   .cuerpo{grid-template-columns:1fr}
-  #mapa{height:62vh;flex:none}
+  .mapas{height:64vh;flex:none}
+  .foco{display:none}
   aside{border-left:0;border-top:1px solid var(--line)}
-  .lista{max-height:none}
   .relojes{margin-left:0}
 }
-@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
 <header>
   <div class="marca"><h1>Convección Chile</h1><span>GOES-19 · banda 13 + rayos GLM</span></div>
+  <div class="zonas" id="zonas" role="group" aria-label="Zona del mapa"></div>
   <span class="chip" id="chipImg">Cargando…</span>
   <span class="chip" id="chipExtra" hidden></span>
   <div class="relojes">
@@ -113,7 +124,13 @@ body.tv .tiempo button,body.tv .capas{display:none}
 
 <div class="cuerpo">
   <div class="mapa-col">
-    <div id="mapa" role="region" aria-label="Mapa satelital de Chile con nubes convectivas"></div>
+    <div class="mapas">
+      <div id="mapa" role="region" aria-label="Mapa satelital con nubes convectivas"></div>
+      <div class="foco" id="foco" hidden>
+        <div class="barra"><small>Foco</small><b id="focoTit">—</b><span id="focoDat"></span></div>
+        <div id="mapaFoco"></div>
+      </div>
+    </div>
     <div class="tiempo">
       <button type="button" id="bPlay" aria-label="Reproducir loop" title="Reproducir loop">▶</button>
       <button type="button" id="bAtras" aria-label="Imagen anterior" title="Imagen anterior">‹</button>
@@ -145,138 +162,246 @@ body.tv .tiempo button,body.tv .capas{display:none}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 const TIPOS = {
-  cb:           {n:"CB",                     c:"--cb",    orden:0},
-  sistema:      {n:"Sistema convectivo",     c:"--cb",    orden:0},
-  frontal_conv: {n:"Frontal con convección", c:"--fconv", orden:1},
-  moderada:     {n:"Convección moderada",    c:"--mod",   orden:2},
+  cb:           {n:"CB",                     c:"--cb",    orden:0, corto:"CB"},
+  sistema:      {n:"Sistema convectivo",     c:"--cb",    orden:0, corto:"SCM"},
+  frontal_conv: {n:"Frontal con convección", c:"--fconv", orden:1, corto:"F+C"},
+  moderada:     {n:"Convección moderada",    c:"--mod",   orden:2, corto:"Mod."},
   frontal:      {n:"Banda frontal",          c:"--front", orden:3},
   alta:         {n:"Nubosidad alta",         c:"--alta",  orden:4}
 };
+const CONVECTIVO = ["cb","sistema","frontal_conv"];
 const TEND = {creciendo:"↑ creciendo", disipando:"↓ disipando", estable:"→ estable", nueva:"• nueva"};
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-const TV = new URLSearchParams(location.search).has("tv");
+const Q = new URLSearchParams(location.search);
+const TV = Q.has("tv");
 if (TV) document.body.classList.add("tv");
+const QUIETO = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const guardarLS = (k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){} };
+const leerLS = (k,d)=>{ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(_){ return d; } };
 
-/* ---------- Mapa ---------- */
-const mapa = L.map("mapa", {zoomControl:true, attributionControl:true, minZoom:3, maxZoom:9, zoomSnap:.25});
-mapa.createPane("satelite"); mapa.getPane("satelite").style.zIndex = 350;
-mapa.createPane("bordes");   mapa.getPane("bordes").style.zIndex = 380; mapa.getPane("bordes").style.pointerEvents = "none";
-mapa.createPane("nombres");  mapa.getPane("nombres").style.zIndex = 390; mapa.getPane("nombres").style.pointerEvents = "none";
-mapa.attributionControl.setPrefix(false);
-mapa.attributionControl.addAttribution('NOAA GOES-19 · Límites: Natural Earth · <a href="https://leafletjs.com">Leaflet</a>');
-const capaLugares = L.layerGroup().addTo(mapa);
-function pintarLugares(){
-  capaLugares.clearLayers();
-  if (!datos || !datos.lugares) return;
-  const z = mapa.getZoom();
-  const MAYORES = ["Arica","Iquique","Antofagasta","Copiapó","La Serena","Valparaíso","Santiago","Rancagua","Talca","Concepción","Temuco","Puerto Montt","Coyhaique","Punta Arenas","Calama","Chillán","Valdivia","Juan Fernández"];
-  datos.lugares.forEach(([n,la,lo])=>{
-    if (z < 5.5 && !MAYORES.includes(n)) return;
-    L.circleMarker([la,lo],{radius:2.5,color:"#e4ecf0",weight:0,fillOpacity:.9,pane:"nombres",interactive:false}).addTo(capaLugares)
-     .bindTooltip(n,{permanent:true,direction:"right",offset:[4,0],className:"lugar",pane:"nombres"});
-  });
+/* ---------- Zonas ---------- */
+const ZONAS = {
+  "Chile":             [[-56.5,-81],[-17.2,-65.5]],
+  "Norte":             [[-30,-73.5],[-17.2,-66.5]],
+  "Centro":            [[-38.5,-75.5],[-29.5,-69]],
+  "Sur":               [[-47.5,-77],[-37.5,-70]],
+  "Austral":           [[-56.5,-77.5],[-46,-64.5]],
+  "Chile + Argentina": [[-56,-82],[-20,-52]]
+};
+let zona = Q.get("zona") && ZONAS[Q.get("zona")] ? Q.get("zona") : leerLS("conv-zona","Chile");
+if (!ZONAS[zona]) zona = "Chile";
+
+/* ---------- Mapas ---------- */
+function crearMapa(id, opciones){
+  const m = L.map(id, Object.assign({minZoom:3, maxZoom:10, zoomSnap:.25, maxBoundsViscosity:.9}, opciones));
+  m.createPane("satelite"); m.getPane("satelite").style.zIndex = 350;
+  m.createPane("bordes");   m.getPane("bordes").style.zIndex = 380; m.getPane("bordes").style.pointerEvents = "none";
+  m.createPane("nombres");  m.getPane("nombres").style.zIndex = 390; m.getPane("nombres").style.pointerEvents = "none";
+  const v = {
+    mapa: m,
+    sat: L.imageOverlay("data:image/gif;base64,R0lGODlhAQABAAAAACw=", [[-60,-100],[-12,-45]], {pane:"satelite", opacity:.9, interactive:false}).addTo(m),
+    celdas: L.layerGroup().addTo(m), trazas: L.layerGroup().addTo(m), lugares: L.layerGroup().addTo(m),
+    rayos: new CapaRayos(m), grande: !!opciones.grande
+  };
+  return v;
 }
-mapa.fitBounds([[-56,-80],[-17,-66]]);
+
+/* Rayos: capa de canvas propia con brillo y parpadeo */
+class CapaRayos{
+  constructor(m){
+    this.m = m; this.pts = [];
+    this.cv = document.createElement("canvas"); this.cv.className = "rayos";
+    m.getContainer().appendChild(this.cv);
+    this.ctx = this.cv.getContext("2d");
+    const ajustar = ()=>{ const r = m.getContainer().getBoundingClientRect(), d = devicePixelRatio||1;
+      this.cv.width = r.width*d; this.cv.height = r.height*d; this.cv.style.width = r.width+"px"; this.cv.style.height = r.height+"px";
+      this.ctx.setTransform(d,0,0,d,0,0); };
+    ajustar(); m.on("resize", ajustar); this.ajustar = ajustar;
+  }
+  poner(pts){ this.pts = (pts||[]).map((p,i)=>({ll:L.latLng(p[0],p[1]), s:((i*0.6180339)%1), v:.55+((i*0.37)%1)*.9})); }
+  dibujar(t){
+    const c = this.ctx, w = this.cv.clientWidth, h = this.cv.clientHeight;
+    c.clearRect(0,0,w,h);
+    if (!this.visible) return;
+    const grande = this.m.getZoom() >= 6;
+    for (const p of this.pts){
+      const q = this.m.latLngToContainerPoint(p.ll);
+      if (q.x < -20 || q.y < -20 || q.x > w+20 || q.y > h+20) continue;
+      const fase = QUIETO ? .5 : (t/1000*p.v + p.s) % 1;
+      const destello = fase < .07;
+      // halo
+      const r = destello ? (grande?16:11) : (grande?7:5);
+      const g = c.createRadialGradient(q.x,q.y,0,q.x,q.y,r);
+      g.addColorStop(0, destello ? "rgba(225,245,255,.95)" : "rgba(140,210,255,.55)");
+      g.addColorStop(.35, destello ? "rgba(120,200,255,.55)" : "rgba(90,170,255,.22)");
+      g.addColorStop(1, "rgba(80,150,255,0)");
+      c.fillStyle = g; c.beginPath(); c.arc(q.x,q.y,r,0,6.283); c.fill();
+      // núcleo
+      c.fillStyle = destello ? "#ffffff" : "#d8f1ff";
+      c.beginPath(); c.arc(q.x,q.y,destello?2.4:1.5,0,6.283); c.fill();
+      // chispa en zigzag durante el destello
+      if (destello && !QUIETO){
+        const k = grande ? 1.6 : 1;
+        c.strokeStyle = "rgba(235,248,255,.95)"; c.lineWidth = 1.3; c.beginPath();
+        c.moveTo(q.x-3*k, q.y-11*k); c.lineTo(q.x+1*k, q.y-5*k); c.lineTo(q.x-2*k, q.y-4*k); c.lineTo(q.x+2*k, q.y+3*k);
+        c.stroke();
+      }
+    }
+  }
+}
+
+const P = crearMapa("mapa", {grande:true, zoomControl:true});
+const F = crearMapa("mapaFoco", {zoomControl:false, attributionControl:false});
+P.mapa.attributionControl.setPrefix(false);
+P.mapa.attributionControl.addAttribution('NOAA GOES-19 · Límites: Natural Earth · <a href="https://leafletjs.com">Leaflet</a>');
+P.mapa.fitBounds(ZONAS[zona]);
 
 fetch("geo/paises.geojson").then(r=>r.json()).then(g=>{
-  L.geoJSON(g, {pane:"bordes", interactive:false,
-    style:f=>({color: f.properties.iso==="CHL" ? "#f0d36a" : "#c8b45a", weight: f.properties.iso==="CHL" ? 1.4 : .8, opacity:.75, fill:false})}).addTo(mapa);
+  [P,F].forEach(v=>L.geoJSON(g, {pane:"bordes", interactive:false,
+    style:f=>({color: f.properties.iso==="CHL" ? "#f0d36a" : "#c8b45a", weight: f.properties.iso==="CHL" ? 1.4 : .8, opacity:.75, fill:false})}).addTo(v.mapa));
 }).catch(()=>{});
 
-const satelite = L.imageOverlay("", [[-57,-95],[-15,-55]], {pane:"satelite", opacity:.88, interactive:false}).addTo(mapa);
-const capaCeldas = L.layerGroup().addTo(mapa);
-const capaTrazas = L.layerGroup().addTo(mapa);
-const capaRayos  = L.layerGroup().addTo(mapa);
+/* ---------- Botones de zona ---------- */
+const zonasBox = document.getElementById("zonas");
+Object.keys(ZONAS).forEach(z=>{
+  const b = document.createElement("button"); b.type="button"; b.textContent=z; b.dataset.z=z;
+  b.onclick = ()=>{ zona=z; guardarLS("conv-zona",z); marcarZona(); P.mapa.flyToBounds(ZONAS[z], {duration:.6}); };
+  zonasBox.appendChild(b);
+});
+function marcarZona(){ zonasBox.querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.dataset.z===zona)); }
+marcarZona();
 
 /* ---------- Capas activables ---------- */
-const VIS = {cb:true, frontal_conv:true, moderada:true, frontal:true, alta:false, lejano:true, rayos:true, trazas:true};
-try { Object.assign(VIS, JSON.parse(localStorage.getItem("conv-capas")||"{}")); } catch(e){}
+const VIS = Object.assign({cb:true, sistema:true, frontal_conv:true, moderada:true, frontal:true, alta:false, lejano:true, vecinos:true, rayos:true, trazas:true, foco:true}, leerLS("conv-capas2",{}));
 const capasBox = document.getElementById("capas");
-[["cb","CB","--cb"],["frontal_conv","Frontal + conv.","--fconv"],["moderada","Moderada","--mod"],["frontal","Frontal","--front"],
- ["alta","Nub. alta","--alta"],["lejano","Pacífico lejano","--dim"],["rayos","Rayos","--mod"],["trazas","Trayectorias","--fg"]].forEach(([k,t,c])=>{
+[["cb","CB y sistemas","--cb"],["frontal_conv","Frontal + conv.","--fconv"],["moderada","Moderada","--mod"],["frontal","Frontal","--front"],
+ ["alta","Nub. alta","--alta"],["vecinos","Argentina","--muted"],["lejano","Pacífico lejano","--dim"],["rayos","Rayos","--rayo"],["trazas","Trayectorias","--fg"],["foco","Recuadro foco","--fg"]].forEach(([k,t,c])=>{
   const l = document.createElement("label");
   l.innerHTML = `<input type="checkbox" id="cap-${k}" ${VIS[k]?"checked":""}><span class="sw" style="--c:var(${c})"></span>${t}`;
-  l.querySelector("input").onchange = e=>{ VIS[k]=e.target.checked; try{localStorage.setItem("conv-capas",JSON.stringify(VIS));}catch(_){} pintar(); };
+  l.querySelector("input").onchange = e=>{ VIS[k]=e.target.checked; if(k==="cb") VIS.sistema=VIS.cb; guardarLS("conv-capas2",VIS); pintar(); };
   capasBox.appendChild(l);
 });
+function visible(c){
+  if (!VIS[c.tipo]) return false;
+  if (c.region==="lejano") return VIS.lejano;
+  if (c.region==="vecinos") return VIS.vecinos;
+  return true;
+}
 
 /* ---------- Estado ---------- */
 let datos = null, idx = 0, sel = null, play = TV, tPlay = null, verAltas = false;
-mapa.on("zoomend", pintarLugares);
 const cache = {};
-
-function hhmm(iso, tz){
-  const d = new Date(iso.replace("Z",":00Z"));
-  return d.toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:tz});
-}
+const hhmm = (iso, tz) => new Date(iso.replace("Z",":00Z")).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:tz});
+const textoArea = a => a>=10000 ? (a/1000).toFixed(0)+" mil km²" : a.toLocaleString("es-CL")+" km²";
+const textoRayos = r => r==null ? "rayos s/d" : `${r} rayo${r===1?"":"s"}`;
 function precargar(){ datos.frames.forEach(f=>{ if(!cache[f.img]){ const im=new Image(); im.src="data/"+f.img+"?v="+datos.generado; cache[f.img]=im; }}); }
 
-function visible(c){ return c.lejano ? (VIS.lejano && VIS[c.tipo]) : VIS[c.tipo]; }
-
-function textoCelda(c){
-  const ry = c.rayos==null ? "rayos s/d" : `${c.rayos} rayo${c.rayos===1?"":"s"}`;
-  return {ry, area: c.area>=10000 ? (c.area/1000).toFixed(0)+" mil km²" : c.area.toLocaleString("es-CL")+" km²"};
+function pintarLugares(v){
+  v.lugares.clearLayers();
+  if (!datos || !datos.lugares) return;
+  const z = v.mapa.getZoom();
+  const MAYORES = ["Arica","Iquique","Antofagasta","Calama","Copiapó","La Serena","Valparaíso","Santiago","Rancagua","Talca","Chillán","Concepción","Temuco","Valdivia","Puerto Montt","Coyhaique","Punta Arenas","Juan Fernández",
+    "Mendoza","Córdoba","Salta","San Miguel de Tucumán","Neuquén","Buenos Aires","Comodoro Rivadavia","Río Gallegos","Bahía Blanca","Resistencia"];
+  datos.lugares.forEach(([n,la,lo,pais])=>{
+    if (z < 5.5 && !MAYORES.includes(n)) return;
+    if (z < 4.5 && pais!=="CL" && !["Mendoza","Córdoba","Buenos Aires","Salta"].includes(n)) return;
+    L.circleMarker([la,lo],{radius:2.5,color:"#e4ecf0",weight:0,fillOpacity:.85,pane:"nombres",interactive:false}).addTo(v.lugares)
+     .bindTooltip(n,{permanent:true,direction:"right",offset:[4,0],className:"lugar"+(pais==="CL"?"":" x"),pane:"nombres"});
+  });
 }
 
+/* Dibuja la imagen y las celdas de un frame en un mapa */
+function dibujarEn(v, f, foco){
+  if (datos.limites){ v.sat.setBounds(L.latLngBounds(datos.limites)); }
+  v.sat.setUrl("data/"+f.img+"?v="+datos.generado);
+  v.celdas.clearLayers(); v.trazas.clearLayers();
+  v.rayos.visible = VIS.rayos; v.rayos.poner(f.rp);
+  f.celdas.forEach(c=>{
+    if (!visible(c) && !(foco && foco.id===c.id)) return;
+    const col = css(TIPOS[c.tipo].c), tenue = c.region!=="chile", ancho = CONVECTIVO.includes(c.tipo) ? 2.5 : 1.8;
+    const elegido = (foco && foco.id===c.id) || sel===c.id;
+    c.contorno.forEach(anillo=>{
+      L.polygon(anillo, {color:"#000", weight:ancho+2.5, opacity:tenue?.3:.55, fill:false, interactive:false}).addTo(v.celdas);
+      const pol = L.polygon(anillo, {color:col, weight:elegido?ancho+1:ancho, opacity:tenue?.6:.95, fill:true, fillOpacity:elegido?.16:.04,
+        dashArray: c.region==="lejano" ? "5 5" : null}).addTo(v.celdas);
+      pol.bindTooltip(`<b style="color:${col}">${TIPOS[c.tipo].n}</b> · ${c.lugar}<br>Tope mínimo ${c.tmin} °C · medio ${c.tmed} °C<br>${textoRayos(c.rayos)} · ${textoArea(c.area)}<br>${c.tendencia?TEND[c.tendencia]:""}${c.dT10!=null?` (${c.dT10>0?"+":""}${c.dT10} °C/10 min)`:""}`,
+        {className:"info", sticky:true});
+      pol.on("click",()=>{ sel=c.id; detener(); idx=datos.frames.length-1; pintar(); listar(); });
+    });
+    const etiquetar = TIPOS[c.tipo].corto && c.region!=="lejano" && (c.region==="chile" || CONVECTIVO.includes(c.tipo)) && (v.grande || elegido);
+    if (etiquetar){
+      const flecha = {creciendo:"↑",disipando:"↓",estable:"→",nueva:"•"}[c.tendencia]||"";
+      L.marker([c.lat,c.lon],{opacity:0,interactive:false}).addTo(v.celdas)
+       .bindTooltip(`<b>${TIPOS[c.tipo].corto}</b> ${c.tmin}° ${flecha}`, {permanent:true, direction:"right", offset:[8,0], className:"etq t-"+c.tipo});
+    }
+    if (VIS.trazas && c.traza && c.traza.length>1)
+      L.polyline(c.traza.map(p=>[p[0],p[1]]),{color:col,weight:2,opacity:.8,dashArray:"2 4",interactive:false}).addTo(v.trazas);
+  });
+}
+
+/* Celda que muestra el recuadro de foco */
+function elegirFoco(){
+  const ult = datos.frames[datos.frames.length-1].celdas;
+  if (sel!=null){ const c = ult.find(x=>x.id===sel); if (c) return c; }
+  const ch = ult.filter(c=>c.region==="chile" && CONVECTIVO.includes(c.tipo)).sort((a,b)=>a.tmin-b.tmin);
+  if (ch.length) return ch[0];
+  const mo = ult.filter(c=>c.region==="chile" && c.tipo==="moderada").sort((a,b)=>a.tmin-b.tmin);
+  if (mo.length) return mo[0];
+  const ar = ult.filter(c=>c.region==="vecinos" && CONVECTIVO.includes(c.tipo)).sort((a,b)=>(b.rayos||0)-(a.rayos||0) || a.tmin-b.tmin);
+  return ar[0] || null;
+}
+
+let focoId = null;
 function pintar(){
   if (!datos || !datos.frames.length) return;
   const f = datos.frames[idx];
-  if (datos.limites) satelite.setBounds(L.latLngBounds(datos.limites));
-  satelite.setUrl("data/"+f.img+"?v="+datos.generado);
-  capaCeldas.clearLayers(); capaTrazas.clearLayers(); capaRayos.clearLayers();
-  const ultimo = idx === datos.frames.length-1;
-
-  if (VIS.rayos && f.rp) f.rp.forEach(([la,lo])=>L.circleMarker([la,lo],{radius:2,color:"#ffd23f",weight:0,fillOpacity:.9,interactive:false}).addTo(capaRayos));
-
-  f.celdas.forEach(c=>{
-    if (!visible(c)) return;
-    const col = css(TIPOS[c.tipo].c), t = textoCelda(c);
-    c.contorno.forEach(anillo=>{
-      L.polygon(anillo, {color:"#000", weight:(c.tipo==="cb"?2.5:1.8)+2.5, opacity:c.lejano?.3:.55, fill:false, interactive:false}).addTo(capaCeldas);
-      const pol = L.polygon(anillo, {color:col, weight: c.tipo==="cb"?2.5:1.8, opacity:c.lejano?.55:.95, fill:true, fillOpacity:sel===c.id?.18:.04,
-        dashArray: c.lejano ? "5 5" : null}).addTo(capaCeldas);
-      pol.bindTooltip(`<b style="color:${col}">${TIPOS[c.tipo].n}</b> · ${c.lugar}<br>Tope mínimo ${c.tmin} °C · medio ${c.tmed} °C<br>${t.ry} · ${t.area}<br>${c.tendencia?TEND[c.tendencia]:""}${c.dT10!=null?` (${c.dT10>0?"+":""}${c.dT10} °C/10 min)`:""}`,
-        {className:"info", sticky:true});
-      pol.on("click",()=>{ sel=c.id; pintar(); listar(); });
-    });
-    if (!c.lejano && (c.tipo==="cb" || c.tipo==="sistema" || c.tipo==="frontal_conv" || c.tipo==="moderada")){
-      const flecha = {creciendo:"↑",disipando:"↓",estable:"→",nueva:"•"}[c.tendencia]||"";
-      L.marker([c.lat,c.lon],{opacity:0,interactive:false}).addTo(capaCeldas)
-       .bindTooltip(`<b>${c.tipo==="cb"?"CB":c.tipo==="sistema"?"SCM":c.tipo==="moderada"?"Mod.":"F+C"}</b> ${c.tmin}° ${flecha}`,
-         {permanent:true, direction:"right", offset:[8,0], className:"etq t-"+c.tipo});
+  dibujarEn(P, f, null);
+  const fc = elegirFoco(), caja = document.getElementById("foco");
+  if (fc && VIS.foco){
+    caja.hidden = false;
+    caja.style.setProperty("--c", `var(${TIPOS[fc.tipo].c})`);
+    document.getElementById("focoTit").textContent = `${TIPOS[fc.tipo].n} · ${fc.lugar}`;
+    document.getElementById("focoDat").textContent = `${fc.tmin} °C · ${textoRayos(fc.rayos)}`;
+    F.mapa.invalidateSize(); F.rayos.ajustar();
+    const fcF = f.celdas.find(x=>x.id===fc.id) || fc;
+    dibujarEn(F, f, fcF);
+    if (focoId !== fc.id){
+      focoId = fc.id;
+      const pts = fc.contorno.flat();
+      const b = pts.length ? L.latLngBounds(pts) : L.latLngBounds([[fc.lat-1,fc.lon-1],[fc.lat+1,fc.lon+1]]);
+      F.mapa.fitBounds(b.pad(.6), {maxZoom:8});
+      pintarLugares(F);
     }
-    if (VIS.trazas && c.traza && c.traza.length>1)
-      L.polyline(c.traza.map(p=>[p[0],p[1]]),{color:col,weight:2,opacity:.8,dashArray:"2 4",interactive:false}).addTo(capaTrazas);
-  });
-
+  } else { caja.hidden = true; focoId = null; }
   document.getElementById("rango").value = idx;
-  document.getElementById("hora").textContent = `${hhmm(f.t,"UTC")} UTC · ${hhmm(f.t,"America/Santiago")} Chile${ultimo?"":"  ◷"}`;
+  document.getElementById("hora").textContent = `${hhmm(f.t,"UTC")} UTC · ${hhmm(f.t,"America/Santiago")} Chile`;
 }
 
 function listar(){
-  const f = datos.frames[datos.frames.length-1];   // la lista siempre muestra la última imagen
+  const f = datos.frames[datos.frames.length-1];
   const box = document.getElementById("lista"); box.innerHTML = "";
-  const cerca = f.celdas.filter(c=>!c.lejano).sort((a,b)=>TIPOS[a.tipo].orden-TIPOS[b.tipo].orden || a.tmin-b.tmin);
-  const lejos = f.celdas.filter(c=>c.lejano);
-  const cbs = cerca.filter(c=>c.tipo==="cb"||c.tipo==="sistema"||c.tipo==="frontal_conv");
+  const orden = (a,b)=>TIPOS[a.tipo].orden-TIPOS[b.tipo].orden || a.tmin-b.tmin;
+  const chile = f.celdas.filter(c=>c.region==="chile").sort(orden);
+  const vecinos = f.celdas.filter(c=>c.region==="vecinos" && c.tipo!=="alta").sort(orden);
+  const lejos = f.celdas.filter(c=>c.region==="lejano");
+  const conv = chile.filter(c=>CONVECTIVO.includes(c.tipo));
   const est = document.getElementById("estado"), sub = document.getElementById("estadoSub");
-  if (cbs.length){ est.className="estado alerta"; est.textContent = `${cbs.length} ${cbs.length===1?"núcleo convectivo":"núcleos convectivos"} activo${cbs.length===1?"":"s"}`; }
-  else if (cerca.some(c=>c.tipo==="moderada")){ est.className="estado aviso"; est.textContent="Convección moderada, sin CB"; }
-  else { est.className="estado ok"; est.textContent="Sin convección"; }
-  sub.textContent = cbs.length ? "TS, SH y granizo esperables bajo los núcleos." : "Un TS o SH reportado en Chile hoy sería sospechoso.";
+  if (conv.length){ est.className="estado alerta"; est.textContent = `${conv.length} ${conv.length===1?"núcleo convectivo activo":"núcleos convectivos activos"}`; sub.textContent = "TS, SH y granizo esperables bajo los núcleos."; }
+  else if (chile.some(c=>c.tipo==="moderada")){ est.className="estado aviso"; est.textContent="Convección moderada, sin CB"; sub.textContent="Posibles chubascos; un TS reportado conviene revisarlo."; }
+  else { est.className="estado ok"; est.textContent="Sin convección en Chile"; sub.textContent="Un TS o SH reportado ahora sería sospechoso."; }
   if (!f.rayos) sub.textContent += " Rayos GLM no disponibles en esta imagen.";
 
   const fila = c=>{
-    const t = textoCelda(c), b = document.createElement("button");
-    b.type="button"; b.className = "cel"+(c.lejano?" lejano":"")+(sel===c.id?" sel":"");
+    const b = document.createElement("button");
+    b.type="button"; b.className = "cel"+(c.region!=="chile"?" tenue":"")+(sel===c.id?" sel":"");
     b.style.setProperty("--c", `var(${TIPOS[c.tipo].c})`);
     b.innerHTML = `<i></i><span><span class="t">${TIPOS[c.tipo].n}</span> <span class="lg">· ${c.lugar}</span></span>
       <span class="tend ${c.tendencia||""}">${TEND[c.tendencia]||""}</span>
-      <span class="d">${c.tmin} °C · ${t.ry} · ${t.area}${c.tipo.startsWith("frontal")?` · ${c.largo} km`:""}</span>`;
-    b.onclick = ()=>{ sel=c.id; idx=datos.frames.length-1; detener(); mapa.flyTo([c.lat,c.lon], Math.max(mapa.getZoom(),6), {duration:.6}); pintar(); listar(); };
+      <span class="d">${c.tmin} °C · ${textoRayos(c.rayos)} · ${textoArea(c.area)}${c.tipo.startsWith("frontal")?` · ${c.largo} km`:""}</span>`;
+    b.onclick = ()=>{ sel = sel===c.id ? null : c.id; detener(); idx=datos.frames.length-1; focoId=null; pintar(); listar(); };
     box.appendChild(b);
   };
-  const principales = cerca.filter(c=>c.tipo!=="alta"), altas = cerca.filter(c=>c.tipo==="alta");
+  const principales = chile.filter(c=>c.tipo!=="alta"), altas = chile.filter(c=>c.tipo==="alta");
   principales.forEach(fila);
   if (altas.length){
     const b = document.createElement("button"); b.type="button"; b.className="plegado";
@@ -285,9 +410,18 @@ function listar(){
     box.appendChild(b);
     if (verAltas) altas.forEach(fila);
   }
-  if (!cerca.length) box.insertAdjacentHTML("beforeend",`<div class="vacio">No hay nubes de tope frío (−40 °C o menos) sobre Chile ni en el Pacífico cercano.</div>`);
+  if (!chile.length) box.insertAdjacentHTML("beforeend",`<div class="vacio">No hay nubes de tope frío (−40 °C o menos) sobre Chile ni en el Pacífico cercano.</div>`);
+  if (vecinos.length){ box.insertAdjacentHTML("beforeend",`<div class="grupo">Argentina y países vecinos</div>`); vecinos.forEach(fila); }
   if (lejos.length){ box.insertAdjacentHTML("beforeend",`<div class="grupo">Pacífico lejano</div>`); lejos.forEach(fila); }
 }
+
+/* ---------- Animación de rayos ---------- */
+let ultimoCuadro = 0;
+function animar(t){
+  if (t - ultimoCuadro > 55){ ultimoCuadro = t; P.rayos.dibujar(t); if (!document.getElementById("foco").hidden) F.rayos.dibujar(t); }
+  requestAnimationFrame(animar);
+}
+requestAnimationFrame(animar);
 
 /* ---------- Loop ---------- */
 function paso(){
@@ -295,7 +429,7 @@ function paso(){
   idx = (idx+1) % n; pintar();
   tPlay = setTimeout(paso, idx===n-1 ? (TV?6000:2500) : 650);
 }
-function iniciar(){ if(!datos||datos.frames.length<2) return; play=true; document.getElementById("bPlay").textContent="❚❚"; document.getElementById("bPlay").setAttribute("aria-label","Pausar loop"); clearTimeout(tPlay); tPlay=setTimeout(paso,400); }
+function iniciar(){ if(!datos||datos.frames.length<2) return; play=true; const b=document.getElementById("bPlay"); b.textContent="❚❚"; b.setAttribute("aria-label","Pausar loop"); clearTimeout(tPlay); tPlay=setTimeout(paso,400); }
 function detener(){ play=false; clearTimeout(tPlay); const b=document.getElementById("bPlay"); b.textContent="▶"; b.setAttribute("aria-label","Reproducir loop"); }
 document.getElementById("bPlay").onclick = ()=> play ? detener() : iniciar();
 document.getElementById("bAtras").onclick = ()=>{ detener(); idx=Math.max(0,idx-1); pintar(); };
@@ -306,7 +440,18 @@ document.addEventListener("keydown",e=>{
   if (e.key===" "){ e.preventDefault(); play?detener():iniciar(); }
   if (e.key==="ArrowLeft") document.getElementById("bAtras").click();
   if (e.key==="ArrowRight") document.getElementById("bAdel").click();
+  if (e.key==="Escape"){ sel=null; focoId=null; pintar(); listar(); }
 });
+P.mapa.on("zoomend", ()=>pintarLugares(P));
+/* que el mapa nunca muestre zonas sin imagen */
+function ajustarZoomMin(){
+  if (!datos || !datos.limites) return;
+  const z = P.mapa.getBoundsZoom(L.latLngBounds(datos.limites), true);
+  P.mapa.setMinZoom(z);
+  if (P.mapa.getZoom() < z) P.mapa.setZoom(z);
+}
+P.mapa.on("resize", ajustarZoomMin);
+F.mapa.on("zoomend", ()=>pintarLugares(F));
 
 /* ---------- Carga y actualización automática ---------- */
 async function cargar(){
@@ -317,9 +462,11 @@ async function cargar(){
     if (datos && d.generado===datos.generado) { edad(); return; }
     const estabaEnUltimo = !datos || idx===datos.frames.length-1;
     datos = d;
+    if (datos.limites){ const b = L.latLngBounds(datos.limites); P.mapa.setMaxBounds(b); F.mapa.setMaxBounds(b); ajustarZoomMin(); }
     document.getElementById("rango").max = Math.max(0,datos.frames.length-1);
     if (estabaEnUltimo || idx>=datos.frames.length) idx = datos.frames.length-1;
-    precargar(); pintar(); listar(); edad(); pintarLugares();
+    focoId = null;
+    precargar(); pintar(); listar(); edad(); pintarLugares(P);
     if (play) iniciar();
   }catch(e){
     const c=document.getElementById("chipImg"); c.className="chip warn"; c.textContent="Sin conexión con los datos";
@@ -341,6 +488,7 @@ function reloj(){
   const n=new Date();
   document.getElementById("rU").textContent=n.toISOString().slice(11,16);
   document.getElementById("rL").textContent=n.toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"America/Santiago"});
+  edad();
 }
 reloj(); setInterval(reloj,15000);
 cargar(); setInterval(cargar, 2*60*1000);

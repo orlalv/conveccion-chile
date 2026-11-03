@@ -29,9 +29,10 @@ from shapely.geometry import shape
 from skimage.measure import find_contours, approximate_polygon
 
 # ---------------- Configuración ----------------
-LON_MIN, LON_MAX = -95.0, -55.0       # Pacífico vecino + Chile + Argentina para contexto
-LAT_MIN, LAT_MAX = -57.0, -15.0
-ANCHO = 1100                           # píxeles de la imagen (~3 km por píxel)
+LON_MIN, LON_MAX = -118.0, -32.0      # ancho suficiente para llenar una pantalla horizontal con todo Chile
+LAT_MIN, LAT_MAX = -62.0, -10.0
+ANCHO = 2000                           # píxeles de la imagen (~4 km por píxel)
+LON_VECINOS = -53.0                    # al este de esto no se detecta (Atlántico, Brasil)
 UMBRAL = -40.0                         # °C: tope frío que define un objeto
 AREA_MIN = 250.0                       # km²
 ZONA_MAR_KM = 300.0                    # Pacífico cercano que también cuenta
@@ -56,6 +57,17 @@ LUGARES = [  # referencias para nombrar las celdas
     ("Cochrane", -47.25, -72.57), ("Caleta Tortel", -47.8, -73.54), ("Villa O'Higgins", -48.47, -72.56),
     ("Puerto Natales", -51.73, -72.5), ("Punta Arenas", -53.16, -70.91), ("Porvenir", -53.3, -70.37),
     ("Puerto Williams", -54.93, -67.6), ("Juan Fernández", -33.64, -78.83),
+]
+VECINOS = [  # referencias fuera de Chile
+    ("Salta", -24.79, -65.41), ("San Miguel de Tucumán", -26.82, -65.22), ("Santiago del Estero", -27.79, -64.26),
+    ("Catamarca", -28.47, -65.78), ("La Rioja", -29.41, -66.86), ("San Juan", -31.54, -68.53), ("Mendoza", -32.89, -68.83),
+    ("San Luis", -33.3, -66.34), ("Córdoba", -31.42, -64.18), ("Rosario", -32.95, -60.64), ("Santa Fe", -31.63, -60.7),
+    ("Resistencia", -27.45, -58.99), ("Formosa", -26.18, -58.17), ("Corrientes", -27.47, -58.83), ("Posadas", -27.37, -55.9),
+    ("Buenos Aires", -34.6, -58.38), ("Santa Rosa", -36.62, -64.29), ("Bahía Blanca", -38.72, -62.27), ("Neuquén", -38.95, -68.06),
+    ("San Carlos de Bariloche", -41.13, -71.31), ("Esquel", -42.91, -71.32), ("Trelew", -43.25, -65.31),
+    ("Comodoro Rivadavia", -45.86, -67.48), ("Río Gallegos", -51.62, -69.22), ("Ushuaia", -54.8, -68.3),
+    ("Malargüe", -35.47, -69.58), ("Mar del Plata", -38.0, -57.56), ("Montevideo", -34.9, -56.16),
+    ("Asunción", -25.26, -57.58), ("Tarija", -21.53, -64.73), ("Uyuni", -20.46, -66.83), ("Tacna", -18.01, -70.25),
 ]
 
 # ---------------- Proyección geoestacionaria ----------------
@@ -108,8 +120,10 @@ def mascaras(LON, LAT, px_km):
     paises = [shape(f["geometry"]) for f in json.load(open(os.path.join(BASE, "geo", "paises.geojson")))["features"]]
     m_chile = contains_xy(chile, LON, LAT)
     m_tierra = np.zeros_like(m_chile)
-    for p in paises:
-        m_tierra |= contains_xy(p, LON, LAT)
+    m_pais = np.zeros(m_chile.shape, "i2")
+    for i, p in enumerate(paises, start=1):
+        dentro = contains_xy(p, LON, LAT)
+        m_tierra |= dentro; m_pais[dentro] = i
     dist_px = ndimage.distance_transform_edt(~m_chile)
     dist_km = dist_px * px_km[:, None]
     # solo el lado del Pacífico: oeste del punto más oriental de Chile en cada fila
@@ -119,7 +133,8 @@ def mascaras(LON, LAT, px_km):
     borde = np.interp(filas, filas[ok], borde[ok])
     pacifico = cols <= borde[:, None]
     zona = m_chile | (~m_tierra & pacifico & (dist_km <= ZONA_MAR_KM))
-    return m_chile, m_tierra, zona
+    nombres = [None] + [f["properties"]["nombre"] for f in json.load(open(os.path.join(BASE, "geo", "paises.geojson")))["features"]]
+    return m_chile, m_tierra, zona, m_pais, nombres
 
 
 # ---------------- Descarga desde AWS (NOAA Open Data) ----------------
@@ -224,19 +239,21 @@ def colorear(T):
 
 
 # ---------------- Detección y clasificación ----------------
-def lugar(lat, lon, m_tierra_pt, en_chile):
+def lugar(lat, lon, m_tierra_pt, en_chile, pais=None):
     def dkm(a, b, c, d):
         p = math.radians
         return 2 * R_TIERRA * math.asin(math.sqrt(math.sin(p(c - a) / 2) ** 2 + math.cos(p(a)) * math.cos(p(c)) * math.sin(p(d - b) / 2) ** 2))
-    n, la, lo = min(LUGARES, key=lambda L: dkm(lat, lon, L[1], L[2]))
+    lista = LUGARES if (en_chile or not m_tierra_pt) else VECINOS + LUGARES
+    n, la, lo = min(lista, key=lambda L: dkm(lat, lon, L[1], L[2]))
     d = dkm(lat, lon, la, lo)
     if not m_tierra_pt:
-        return f"Pacífico frente a {n}" if lon < lo else f"Atlántico"
+        return f"Pacífico frente a {n}" if lon < -70 else "Atlántico"
     if en_chile:
         return n if d < 60 else f"Cerca de {n}"
-    return f"Argentina, al este de {n}"
+    base = n if d < 60 else f"Cerca de {n}"
+    return f"{base} ({pais})" if pais and pais not in n else base
 
-def detectar(T, LON, LAT, px_km, m_chile, m_tierra, zona, rayos):
+def detectar(T, LON, LAT, px_km, m_chile, m_tierra, zona, rayos, m_pais=None, nombres_pais=None):
     alto = T.shape[0]
     fria = np.isfinite(T) & (T <= UMBRAL)
     fria = ndimage.binary_opening(fria, iterations=1)
@@ -261,9 +278,14 @@ def detectar(T, LON, LAT, px_km, m_chile, m_tierra, zona, rayos):
         en_zona = bool(zona[sl][m].any())
         frac_mar = 1 - float(m_tierra[sl][m].mean())
         lon_c = float(LON[sl][m].mean()); lat_c = float(LAT[sl][m].mean())
+        region = "chile"
         if not en_zona:
-            if not (frac_mar > 0.6 and lon_c < -74):
-                continue                                       # fuera de Chile y no es Pacífico lejano
+            if frac_mar > 0.6 and lon_c < -74:
+                region = "lejano"
+            elif frac_mar <= 0.6 and lon_c <= LON_VECINOS:
+                region = "vecinos"
+            else:
+                continue                                       # Atlántico o Brasil: no interesa
         tmin = float(np.nanmin(Ti)); tmed = float(np.nanmean(Ti)); desv = float(np.nanstd(Ti))
         nucleo = float(area_px[sl][m & (T[sl] <= -55)].sum())
         # forma (PCA en km)
@@ -280,6 +302,10 @@ def detectar(T, LON, LAT, px_km, m_chile, m_tierra, zona, rayos):
         lat_n, lon_n = float(la[frio].mean()), float(lo[frio].mean())
         r0, c0 = yy[frio].mean() + sl[0].start, xx[frio].mean() + sl[1].start
         tierra_n = bool(m_tierra[int(r0), int(c0)]); chile_n = bool(m_chile[sl][m].any())
+        pais = None
+        if m_pais is not None and region == "vecinos":
+            vals = m_pais[sl][m]; vals = vals[vals > 0]
+            pais = nombres_pais[int(np.bincount(vals).argmax())] if vals.size else None
         # clasificación
         rayo_ok = ry or 0
         hay_glm = ry is not None
@@ -309,8 +335,8 @@ def detectar(T, LON, LAT, px_km, m_chile, m_tierra, zona, rayos):
             fil = cnt[:, 0] - 1 + sl[0].start; col = cnt[:, 1] - 1 + sl[1].start
             polis.append([[round(float(a), 3), round(float(b), 3)] for a, b in zip(fila_a_lat(fil, alto), col_a_lon(col))])
         celdas.append({
-            "tipo": tipo, "lejano": not en_zona,
-            "lugar": lugar(lat_n, lon_n, tierra_n, chile_n),
+            "tipo": tipo, "lejano": region == "lejano", "region": region,
+            "lugar": lugar(lat_n, lon_n, tierra_n, chile_n and region == "chile", pais),
             "lat": round(lat_n, 3), "lon": round(lon_n, 3),
             "tmin": round(tmin, 1), "tmed": round(tmed, 1), "desv": round(desv, 1),
             "area": int(area), "nucleo": int(nucleo), "largo": int(largo), "razon": round(razon, 1),
@@ -366,8 +392,9 @@ def demo(LON, LAT, m_tierra, k):
     ]
     for (w, t) in capas:
         T = T + (t + 4 * ruido - T) * np.clip(w * 1.6, 0, 1) * (w > 0.12)
-    n = rng.poisson(12 + 9 * k)
-    rayos = (rng.normal(-34.2, 0.15, n), rng.normal(-70.9 + 0.12 * k, 0.18, n))
+    n = rng.poisson(12 + 9 * k); m = 120
+    rayos = (np.concatenate([rng.normal(-34.2, 0.15, n), rng.normal(-27, 0.7, m)]),
+             np.concatenate([rng.normal(-70.9 + 0.12 * k, 0.18, n), rng.normal(-63, 0.8, m)]))
     return T.astype("f4"), rayos
 
 
@@ -394,8 +421,8 @@ def cargar_previo(dir_datos, sitio_url):
         return None
 
 def procesar_escena(T, rayos, t, prev, LON, LAT, px_km, mascs, dir_datos):
-    m_chile, m_tierra, zona = mascs
-    celdas = detectar(T, LON, LAT, px_km, m_chile, m_tierra, zona, rayos)
+    m_chile, m_tierra, zona, m_pais, nombres = mascs
+    celdas = detectar(T, LON, LAT, px_km, m_chile, m_tierra, zona, rayos, m_pais, nombres)
     frames = [f for f in (prev or {}).get("frames", []) if f["t"] != t.strftime("%Y-%m-%dT%H:%MZ")]
     previas = frames[-1]["celdas"] if frames else []
     dt = (t - datetime.strptime(frames[-1]["t"], "%Y-%m-%dT%H:%MZ").replace(tzinfo=timezone.utc)).total_seconds() / 60 if frames else 0
@@ -421,7 +448,7 @@ def procesar_escena(T, rayos, t, prev, LON, LAT, px_km, mascs, dir_datos):
     return {"generado": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),
             "limites": [[LAT_MIN, LON_MIN], [LAT_MAX, LON_MAX]],
             "umbral": UMBRAL, "sig_id": sig, "frames": frames,
-            "lugares": [[n, la, lo] for n, la, lo in LUGARES]}
+            "lugares": [[n, la, lo, "CL"] for n, la, lo in LUGARES] + [[n, la, lo, "X"] for n, la, lo in VECINOS]}
 
 def main():
     ap = argparse.ArgumentParser()
