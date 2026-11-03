@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Convección Chile</title>
+<meta name="description" content="Detección de nubes convectivas sobre Chile con datos del GOES-19. Proyecto de Orlando Álvarez Bustamante.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Sala de monitoreo: mapa a la izquierda, celdas activas a la derecha, línea de tiempo abajo del mapa */
+:root{
+  --bg:#0a0f13; --panel:#10171d; --panel2:#141d24; --line:#21303a; --fg:#e4ecf0; --muted:#89a0ad; --dim:#5d7280;
+  --cb:#ff5a5f; --fconv:#ff9f43; --mod:#f2b441; --alta:#a9b8ff; --front:#5cc8e6; --ok:#7fd99a; --accent:#5cc8e6;
+  --ui:"IBM Plex Sans Condensed","Arial Narrow",Arial,sans-serif; --mono:"IBM Plex Mono",Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--ui);font-size:15px;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:6px 18px;padding:8px max(16px,env(safe-area-inset-left,0px)) 8px max(16px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line);flex:0 0 auto}
+.marca{display:flex;align-items:baseline;gap:10px}
+.marca h1{margin:0;font-size:clamp(18px,1.6vw,30px);font-weight:600;letter-spacing:.01em}
+.marca span{color:var(--muted);font-size:13px}
+.chip{font-family:var(--mono);font-size:12px;padding:2px 8px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.chip.warn{border-color:var(--mod);color:var(--mod)}
+.chip.demo{background:var(--mod);color:#1b1404;border-color:var(--mod);font-weight:500}
+.relojes{margin-left:auto;display:flex;gap:20px;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.reloj{display:flex;flex-direction:column;align-items:flex-end;line-height:1.1}
+.reloj b{font-size:clamp(17px,1.7vw,32px);font-weight:500}
+.reloj small{font-size:10px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
+.reloj.utc b{color:var(--accent)}
+
+.cuerpo{flex:1 1 auto;display:grid;grid-template-columns:minmax(0,1fr) clamp(280px,23vw,420px);min-height:0}
+.mapa-col{display:flex;flex-direction:column;min-width:0;min-height:0}
+#mapa{flex:1 1 auto;background:#0d1418;min-height:0}
+.tiempo{display:flex;align-items:center;gap:12px;padding:8px 14px;border-top:1px solid var(--line);background:var(--panel)}
+.tiempo button{font:inherit;background:var(--panel2);color:var(--fg);border:1px solid var(--line);width:36px;height:32px;cursor:pointer;display:grid;place-items:center}
+.tiempo button:hover{border-color:var(--accent)}
+.tiempo input[type=range]{flex:1;accent-color:var(--accent);min-width:80px}
+.tiempo .hora{font-family:var(--mono);font-size:14px;min-width:150px;text-align:right;font-variant-numeric:tabular-nums}
+button:focus-visible,input:focus-visible,label:focus-within{outline:2px solid var(--mod);outline-offset:1px}
+
+aside{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+.resumen{padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+.resumen h2{margin:0 0 6px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:500}
+.estado{font-size:clamp(16px,1.2vw,22px);font-weight:600}
+.estado.ok{color:var(--ok)} .estado.alerta{color:var(--cb)} .estado.aviso{color:var(--mod)}
+.estado-sub{color:var(--muted);font-size:13px;margin-top:2px}
+.lista{flex:1 1 auto;overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.grupo{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.14em;margin:6px 4px 0}
+.cel{display:grid;grid-template-columns:4px 1fr auto;gap:0 10px;background:var(--panel2);border:1px solid var(--line);padding:9px 10px 9px 0;cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%}
+.cel:hover{border-color:var(--muted)}
+.cel.sel{border-color:var(--fg)}
+.cel i{grid-row:1/4;background:var(--c)}
+.cel .t{font-weight:600;color:var(--c);font-size:15px}
+.cel .lg{font-size:14px}
+.cel .d{grid-column:2/4;font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:3px}
+.cel .tend{font-family:var(--mono);font-size:12px;align-self:start;white-space:nowrap}
+.tend.creciendo{color:var(--cb)} .tend.disipando{color:var(--ok)} .tend.estable,.tend.nueva{color:var(--muted)}
+.cel.lejano{opacity:.62}
+.vacio{color:var(--muted);font-size:14px;padding:8px 4px;line-height:1.45}
+.capas{padding:10px 14px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px}
+.capas label{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--muted)}
+.capas input{accent-color:var(--accent)}
+.capas .sw{width:10px;height:10px;background:var(--c)}
+.escala{padding:8px 14px 10px;border-top:1px solid var(--line)}
+.escala .barra{height:10px;background:linear-gradient(90deg,#d7d7d7 0 18%,#78cdf0 18%,#285fdc 34%,#28be5a 48%,#f0e13c 62%,#eb5a28 76%,#fff 90%,#8246aa)}
+.escala .marcas{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:3px}
+footer{padding:6px 14px 8px;border-top:1px solid var(--line);font-size:11px;color:var(--dim);line-height:1.5}
+footer a{color:var(--muted)}
+
+/* etiquetas sobre el mapa */
+.leaflet-tooltip.etq{background:rgba(10,15,19,.9);border:1px solid var(--c);color:var(--fg);font-family:var(--mono);font-size:12px;padding:2px 6px;border-radius:0;box-shadow:none;white-space:nowrap}
+.leaflet-tooltip.etq::before{display:none}
+.t-cb{--c:var(--cb)} .t-moderada{--c:var(--mod)} .t-frontal_conv{--c:var(--fconv)}
+.leaflet-tooltip.etq b{color:var(--c);font-weight:500}
+.leaflet-tooltip.info{background:#0a0f13;border:1px solid var(--line);color:var(--fg);font-family:var(--ui);font-size:13px;border-radius:0;box-shadow:none;line-height:1.45}
+.leaflet-container{font-family:var(--ui)}
+.leaflet-control-attribution{background:rgba(10,15,19,.75)!important;color:var(--dim)!important}
+.leaflet-control-attribution a{color:var(--muted)!important}
+.leaflet-bar a{background:var(--panel)!important;color:var(--fg)!important;border-color:var(--line)!important}
+
+body.tv{font-size:17px}
+body.tv .tiempo button,body.tv .capas{display:none}
+
+@media (max-width:860px){
+  body{overflow:auto;height:auto}
+  .cuerpo{grid-template-columns:1fr}
+  #mapa{height:62vh;flex:none}
+  aside{border-left:0;border-top:1px solid var(--line)}
+  .lista{max-height:none}
+  .relojes{margin-left:0}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="marca"><h1>Convección Chile</h1><span>GOES-19 · banda 13 + rayos GLM</span></div>
+  <span class="chip" id="chipImg">Cargando…</span>
+  <span class="chip" id="chipExtra" hidden></span>
+  <div class="relojes">
+    <div class="reloj utc"><b id="rU">--:--</b><small>UTC</small></div>
+    <div class="reloj"><b id="rL">--:--</b><small>Hora de Chile</small></div>
+  </div>
+</header>
+
+<div class="cuerpo">
+  <div class="mapa-col">
+    <div id="mapa" role="region" aria-label="Mapa satelital de Chile con nubes convectivas"></div>
+    <div class="tiempo">
+      <button type="button" id="bPlay" aria-label="Reproducir loop" title="Reproducir loop">▶</button>
+      <button type="button" id="bAtras" aria-label="Imagen anterior" title="Imagen anterior">‹</button>
+      <button type="button" id="bAdel" aria-label="Imagen siguiente" title="Imagen siguiente">›</button>
+      <input type="range" id="rango" min="0" max="0" value="0" step="1" aria-label="Imagen del loop">
+      <span class="hora" id="hora">--</span>
+    </div>
+  </div>
+
+  <aside>
+    <div class="resumen">
+      <h2>Chile y Pacífico cercano</h2>
+      <div class="estado" id="estado">—</div>
+      <div class="estado-sub" id="estadoSub"></div>
+    </div>
+    <div class="lista" id="lista"></div>
+    <div class="capas" id="capas"></div>
+    <div class="escala">
+      <div class="barra" aria-hidden="true"></div>
+      <div class="marcas"><span>+20</span><span>−30</span><span>−40</span><span>−48</span><span>−55</span><span>−62</span><span>−70 °C</span></div>
+    </div>
+    <footer>
+      Proyecto de Orlando Álvarez Bustamante · Datos: NOAA GOES-19 (AWS Open Data).
+      Detección automática con fines de apoyo; no reemplaza el análisis del observador.
+    </footer>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const TIPOS = {
+  cb:           {n:"CB",                     c:"--cb",    orden:0},
+  frontal_conv: {n:"Frontal con convección", c:"--fconv", orden:1},
+  moderada:     {n:"Convección moderada",    c:"--mod",   orden:2},
+  frontal:      {n:"Banda frontal",          c:"--front", orden:3},
+  alta:         {n:"Nubosidad alta",         c:"--alta",  orden:4}
+};
+const TEND = {creciendo:"↑ creciendo", disipando:"↓ disipando", estable:"→ estable", nueva:"• nueva"};
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const TV = new URLSearchParams(location.search).has("tv");
+if (TV) document.body.classList.add("tv");
+
+/* ---------- Mapa ---------- */
+const mapa = L.map("mapa", {zoomControl:true, attributionControl:true, minZoom:3, maxZoom:9, zoomSnap:.25});
+mapa.createPane("satelite"); mapa.getPane("satelite").style.zIndex = 350;
+mapa.createPane("bordes");   mapa.getPane("bordes").style.zIndex = 380; mapa.getPane("bordes").style.pointerEvents = "none";
+mapa.createPane("nombres");  mapa.getPane("nombres").style.zIndex = 390; mapa.getPane("nombres").style.pointerEvents = "none";
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
+  {subdomains:"abcd", maxZoom:12, attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © <a href="https://carto.com/attributions">CARTO</a> · NOAA GOES-19'}).addTo(mapa);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png",
+  {subdomains:"abcd", maxZoom:12, pane:"nombres", opacity:.85}).addTo(mapa);
+mapa.fitBounds([[-56,-80],[-17,-66]]);
+
+fetch("geo/paises.geojson").then(r=>r.json()).then(g=>{
+  L.geoJSON(g, {pane:"bordes", interactive:false,
+    style:f=>({color: f.properties.iso==="CHL" ? "#f0d36a" : "#c8b45a", weight: f.properties.iso==="CHL" ? 1.4 : .8, opacity:.75, fill:false})}).addTo(mapa);
+}).catch(()=>{});
+
+const satelite = L.imageOverlay("", [[-57,-95],[-15,-55]], {pane:"satelite", opacity:.88, interactive:false}).addTo(mapa);
+const capaCeldas = L.layerGroup().addTo(mapa);
+const capaTrazas = L.layerGroup().addTo(mapa);
+const capaRayos  = L.layerGroup().addTo(mapa);
+
+/* ---------- Capas activables ---------- */
+const VIS = {cb:true, frontal_conv:true, moderada:true, frontal:true, alta:false, lejano:true, rayos:true, trazas:true};
+try { Object.assign(VIS, JSON.parse(localStorage.getItem("conv-capas")||"{}")); } catch(e){}
+const capasBox = document.getElementById("capas");
+[["cb","CB","--cb"],["frontal_conv","Frontal + conv.","--fconv"],["moderada","Moderada","--mod"],["frontal","Frontal","--front"],
+ ["alta","Nub. alta","--alta"],["lejano","Pacífico lejano","--dim"],["rayos","Rayos","--mod"],["trazas","Trayectorias","--fg"]].forEach(([k,t,c])=>{
+  const l = document.createElement("label");
+  l.innerHTML = `<input type="checkbox" id="cap-${k}" ${VIS[k]?"checked":""}><span class="sw" style="--c:var(${c})"></span>${t}`;
+  l.querySelector("input").onchange = e=>{ VIS[k]=e.target.checked; try{localStorage.setItem("conv-capas",JSON.stringify(VIS));}catch(_){} pintar(); };
+  capasBox.appendChild(l);
+});
+
+/* ---------- Estado ---------- */
+let datos = null, idx = 0, sel = null, play = TV, tPlay = null;
+const cache = {};
+
+function hhmm(iso, tz){
+  const d = new Date(iso.replace("Z",":00Z"));
+  return d.toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:tz});
+}
+function precargar(){ datos.frames.forEach(f=>{ if(!cache[f.img]){ const im=new Image(); im.src="data/"+f.img+"?v="+datos.generado; cache[f.img]=im; }}); }
+
+function visible(c){ return c.lejano ? (VIS.lejano && VIS[c.tipo]) : VIS[c.tipo]; }
+
+function textoCelda(c){
+  const ry = c.rayos==null ? "rayos s/d" : `${c.rayos} rayo${c.rayos===1?"":"s"}`;
+  return {ry, area: c.area>=10000 ? (c.area/1000).toFixed(0)+" mil km²" : c.area.toLocaleString("es-CL")+" km²"};
+}
+
+function pintar(){
+  if (!datos || !datos.frames.length) return;
+  const f = datos.frames[idx];
+  if (datos.limites) satelite.setBounds(L.latLngBounds(datos.limites));
+  satelite.setUrl("data/"+f.img+"?v="+datos.generado);
+  capaCeldas.clearLayers(); capaTrazas.clearLayers(); capaRayos.clearLayers();
+  const ultimo = idx === datos.frames.length-1;
+
+  if (VIS.rayos && f.rp) f.rp.forEach(([la,lo])=>L.circleMarker([la,lo],{radius:2,color:"#ffd23f",weight:0,fillOpacity:.9,interactive:false}).addTo(capaRayos));
+
+  f.celdas.forEach(c=>{
+    if (!visible(c)) return;
+    const col = css(TIPOS[c.tipo].c), t = textoCelda(c);
+    c.contorno.forEach(anillo=>{
+      L.polygon(anillo, {color:"#000", weight:(c.tipo==="cb"?2.5:1.8)+2.5, opacity:c.lejano?.3:.55, fill:false, interactive:false}).addTo(capaCeldas);
+      const pol = L.polygon(anillo, {color:col, weight: c.tipo==="cb"?2.5:1.8, opacity:c.lejano?.55:.95, fill:true, fillOpacity:sel===c.id?.18:.04,
+        dashArray: c.lejano ? "5 5" : null}).addTo(capaCeldas);
+      pol.bindTooltip(`<b style="color:${col}">${TIPOS[c.tipo].n}</b> · ${c.lugar}<br>Tope mínimo ${c.tmin} °C · medio ${c.tmed} °C<br>${t.ry} · ${t.area}<br>${c.tendencia?TEND[c.tendencia]:""}${c.dT10!=null?` (${c.dT10>0?"+":""}${c.dT10} °C/10 min)`:""}`,
+        {className:"info", sticky:true});
+      pol.on("click",()=>{ sel=c.id; pintar(); listar(); });
+    });
+    if (!c.lejano && (c.tipo==="cb" || c.tipo==="frontal_conv" || c.tipo==="moderada")){
+      const flecha = {creciendo:"↑",disipando:"↓",estable:"→",nueva:"•"}[c.tendencia]||"";
+      L.marker([c.lat,c.lon],{opacity:0,interactive:false}).addTo(capaCeldas)
+       .bindTooltip(`<b>${c.tipo==="cb"?"CB":c.tipo==="moderada"?"Mod.":"F+C"}</b> ${c.tmin}° ${flecha}`,
+         {permanent:true, direction:"right", offset:[8,0], className:"etq t-"+c.tipo});
+    }
+    if (VIS.trazas && c.traza && c.traza.length>1)
+      L.polyline(c.traza.map(p=>[p[0],p[1]]),{color:col,weight:2,opacity:.8,dashArray:"2 4",interactive:false}).addTo(capaTrazas);
+  });
+
+  document.getElementById("rango").value = idx;
+  document.getElementById("hora").textContent = `${hhmm(f.t,"UTC")} UTC · ${hhmm(f.t,"America/Santiago")} Chile${ultimo?"":"  ◷"}`;
+}
+
+function listar(){
+  const f = datos.frames[datos.frames.length-1];   // la lista siempre muestra la última imagen
+  const box = document.getElementById("lista"); box.innerHTML = "";
+  const cerca = f.celdas.filter(c=>!c.lejano).sort((a,b)=>TIPOS[a.tipo].orden-TIPOS[b.tipo].orden || a.tmin-b.tmin);
+  const lejos = f.celdas.filter(c=>c.lejano);
+  const cbs = cerca.filter(c=>c.tipo==="cb"||c.tipo==="frontal_conv");
+  const est = document.getElementById("estado"), sub = document.getElementById("estadoSub");
+  if (cbs.length){ est.className="estado alerta"; est.textContent = `${cbs.length} ${cbs.length===1?"núcleo convectivo":"núcleos convectivos"} activo${cbs.length===1?"":"s"}`; }
+  else if (cerca.some(c=>c.tipo==="moderada")){ est.className="estado aviso"; est.textContent="Convección moderada, sin CB"; }
+  else { est.className="estado ok"; est.textContent="Sin convección"; }
+  sub.textContent = cbs.length ? "TS, SH y granizo esperables bajo los núcleos." : "Un TS o SH reportado en Chile hoy sería sospechoso.";
+  if (!f.rayos) sub.textContent += " Rayos GLM no disponibles en esta imagen.";
+
+  const fila = c=>{
+    const t = textoCelda(c), b = document.createElement("button");
+    b.type="button"; b.className = "cel"+(c.lejano?" lejano":"")+(sel===c.id?" sel":"");
+    b.style.setProperty("--c", `var(${TIPOS[c.tipo].c})`);
+    b.innerHTML = `<i></i><span><span class="t">${TIPOS[c.tipo].n}</span> <span class="lg">· ${c.lugar}</span></span>
+      <span class="tend ${c.tendencia||""}">${TEND[c.tendencia]||""}</span>
+      <span class="d">${c.tmin} °C · ${t.ry} · ${t.area}${c.tipo.startsWith("frontal")?` · ${c.largo} km`:""}</span>`;
+    b.onclick = ()=>{ sel=c.id; idx=datos.frames.length-1; detener(); mapa.flyTo([c.lat,c.lon], Math.max(mapa.getZoom(),6), {duration:.6}); pintar(); listar(); };
+    box.appendChild(b);
+  };
+  if (cerca.length){ cerca.forEach(fila); }
+  else box.insertAdjacentHTML("beforeend",`<div class="vacio">No hay nubes de tope frío (−40 °C o menos) sobre Chile ni en el Pacífico cercano.</div>`);
+  if (lejos.length){ box.insertAdjacentHTML("beforeend",`<div class="grupo">Pacífico lejano</div>`); lejos.forEach(fila); }
+}
+
+/* ---------- Loop ---------- */
+function paso(){
+  const n = datos.frames.length;
+  idx = (idx+1) % n; pintar();
+  tPlay = setTimeout(paso, idx===n-1 ? (TV?6000:2500) : 650);
+}
+function iniciar(){ if(!datos||datos.frames.length<2) return; play=true; document.getElementById("bPlay").textContent="❚❚"; document.getElementById("bPlay").setAttribute("aria-label","Pausar loop"); clearTimeout(tPlay); tPlay=setTimeout(paso,400); }
+function detener(){ play=false; clearTimeout(tPlay); const b=document.getElementById("bPlay"); b.textContent="▶"; b.setAttribute("aria-label","Reproducir loop"); }
+document.getElementById("bPlay").onclick = ()=> play ? detener() : iniciar();
+document.getElementById("bAtras").onclick = ()=>{ detener(); idx=Math.max(0,idx-1); pintar(); };
+document.getElementById("bAdel").onclick  = ()=>{ detener(); idx=Math.min(datos.frames.length-1,idx+1); pintar(); };
+document.getElementById("rango").oninput = e=>{ detener(); idx=+e.target.value; pintar(); };
+document.addEventListener("keydown",e=>{
+  if (e.target.tagName==="INPUT") return;
+  if (e.key===" "){ e.preventDefault(); play?detener():iniciar(); }
+  if (e.key==="ArrowLeft") document.getElementById("bAtras").click();
+  if (e.key==="ArrowRight") document.getElementById("bAdel").click();
+});
+
+/* ---------- Carga y actualización automática ---------- */
+async function cargar(){
+  try{
+    const r = await fetch("data/index.json?t="+Date.now(), {cache:"no-store"});
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    if (datos && d.generado===datos.generado) { edad(); return; }
+    const estabaEnUltimo = !datos || idx===datos.frames.length-1;
+    datos = d;
+    document.getElementById("rango").max = Math.max(0,datos.frames.length-1);
+    if (estabaEnUltimo || idx>=datos.frames.length) idx = datos.frames.length-1;
+    precargar(); pintar(); listar(); edad();
+    if (play) iniciar();
+  }catch(e){
+    const c=document.getElementById("chipImg"); c.className="chip warn"; c.textContent="Sin conexión con los datos";
+  }
+}
+function edad(){
+  if (!datos || !datos.frames.length) return;
+  const f = datos.frames[datos.frames.length-1];
+  const min = Math.round((Date.now() - Date.parse(f.t.replace("Z",":00Z")))/60000);
+  const c = document.getElementById("chipImg");
+  c.textContent = `Última imagen ${hhmm(f.t,"UTC")} UTC · hace ${min} min`;
+  c.className = "chip" + (min>45 && !datos.demo ? " warn" : "");
+  const x = document.getElementById("chipExtra");
+  if (datos.demo){ x.hidden=false; x.className="chip demo"; x.textContent="DATOS DE DEMOSTRACIÓN"; }
+  else if (min>45){ x.hidden=false; x.className="chip warn"; x.textContent="Imagen atrasada"; }
+  else x.hidden=true;
+}
+function reloj(){
+  const n=new Date();
+  document.getElementById("rU").textContent=n.toISOString().slice(11,16);
+  document.getElementById("rL").textContent=n.toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit",hour12:false,timeZone:"America/Santiago"});
+}
+reloj(); setInterval(reloj,15000);
+cargar(); setInterval(cargar, 2*60*1000);
+</script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+site/data/
+site/geo/
+__pycache__/
+*.nc

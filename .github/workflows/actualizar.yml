@@ -1,0 +1,55 @@
+name: Actualizar visor
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"     # cada 10 minutos (GitHub puede atrasarse algunos minutos)
+  workflow_dispatch:            # botón "Run workflow" para ejecutarlo a mano
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: visor
+  cancel-in-progress: false
+
+jobs:
+  actualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar librerías
+        run: pip install -r requirements.txt
+
+      - name: Configurar Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Procesar imagen del GOES-19
+        env:
+          SITIO_URL: ${{ steps.pages.outputs.base_url }}
+        run: python procesar.py
+
+      - name: Copiar límites geográficos
+        run: mkdir -p site/geo && cp geo/*.geojson site/geo/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Publicar
+        id: deploy
+        uses: actions/deploy-pages@v4
