@@ -39,12 +39,14 @@ header{display:flex;align-items:center;flex-wrap:wrap;gap:6px 18px;padding:8px m
 .mapa-col{display:flex;flex-direction:column;min-width:0;min-height:0}
 .mapas{flex:1 1 auto;position:relative;min-height:0}
 #mapa{position:absolute;inset:0;background:#0d1418}
-.foco{position:absolute;right:12px;bottom:12px;width:min(36%,520px);height:min(46%,420px);min-width:260px;min-height:220px;z-index:900;border:1px solid var(--fg);background:#0d1418;display:flex;flex-direction:column;box-shadow:0 0 0 4px rgba(10,15,19,.7)}
+.foco{position:absolute;left:12px;top:12px;width:min(36%,520px);height:min(46%,420px);min-width:260px;min-height:220px;z-index:900;border:1px solid var(--fg);background:#0d1418;display:flex;flex-direction:column;box-shadow:0 0 0 4px rgba(10,15,19,.7)}
 .foco[hidden]{display:none}
 .foco .barra{display:flex;align-items:baseline;gap:8px;padding:5px 9px;background:rgba(10,15,19,.92);border-bottom:1px solid var(--line);font-size:14px}
 .foco .barra small{color:var(--muted);font-size:11px;letter-spacing:.14em;text-transform:uppercase}
 .foco .barra b{color:var(--c,var(--fg));font-weight:600}
 .foco .barra span{color:var(--muted);font-family:var(--mono);font-size:12px;margin-left:auto}
+.foco .cerrar{font:inherit;font-size:18px;line-height:1;background:none;border:1px solid var(--line);color:var(--fg);width:28px;height:26px;cursor:pointer;margin-left:6px}
+.foco .cerrar:hover{border-color:var(--fg)}
 #mapaFoco{flex:1 1 auto;background:#0d1418}
 .tiempo{display:flex;align-items:center;gap:12px;padding:8px 14px;border-top:1px solid var(--line);background:var(--panel)}
 .tiempo button{font:inherit;background:var(--panel2);color:var(--fg);border:1px solid var(--line);width:36px;height:32px;cursor:pointer;display:grid;place-items:center}
@@ -127,7 +129,7 @@ body.tv .tiempo button,body.tv .capas{display:none}
     <div class="mapas">
       <div id="mapa" role="region" aria-label="Mapa satelital con nubes convectivas"></div>
       <div class="foco" id="foco" hidden>
-        <div class="barra"><small>Foco</small><b id="focoTit">—</b><span id="focoDat"></span></div>
+        <div class="barra"><small>Foco</small><b id="focoTit">—</b><span id="focoDat"></span><button type="button" class="cerrar" id="focoCerrar" aria-label="Cerrar ventana de foco" title="Cerrar (Esc)">×</button></div>
         <div id="mapaFoco"></div>
       </div>
     </div>
@@ -250,7 +252,8 @@ class CapaRayos{
   }
 }
 
-const P = crearMapa("mapa", {grande:true, zoomControl:true});
+const P = crearMapa("mapa", {grande:true, zoomControl:false});
+L.control.zoom({position:"topright"}).addTo(P.mapa);
 const F = crearMapa("mapaFoco", {zoomControl:false, attributionControl:false});
 P.mapa.attributionControl.setPrefix(false);
 P.mapa.attributionControl.addAttribution('NOAA GOES-19 · Límites: Natural Earth · <a href="https://leafletjs.com">Leaflet</a>');
@@ -275,7 +278,7 @@ marcarZona();
 const VIS = Object.assign({cb:true, sistema:true, frontal_conv:true, moderada:true, frontal:true, alta:false, lejano:true, vecinos:true, rayos:true, trazas:true, foco:true}, leerLS("conv-capas2",{}));
 const capasBox = document.getElementById("capas");
 [["cb","CB y sistemas","--cb"],["frontal_conv","Frontal + conv.","--fconv"],["moderada","Moderada","--mod"],["frontal","Frontal","--front"],
- ["alta","Nub. alta","--alta"],["vecinos","Argentina","--muted"],["lejano","Pacífico lejano","--dim"],["rayos","Rayos","--rayo"],["trazas","Trayectorias","--fg"],["foco","Recuadro foco","--fg"]].forEach(([k,t,c])=>{
+ ["alta","Nub. alta","--alta"],["vecinos","Argentina","--muted"],["lejano","Pacífico lejano","--dim"],["rayos","Rayos","--rayo"],["trazas","Trayectorias","--fg"],["foco","Ventana al pasar el mouse","--fg"]].forEach(([k,t,c])=>{
   const l = document.createElement("label");
   l.innerHTML = `<input type="checkbox" id="cap-${k}" ${VIS[k]?"checked":""}><span class="sw" style="--c:var(${c})"></span>${t}`;
   l.querySelector("input").onchange = e=>{ VIS[k]=e.target.checked; if(k==="cb") VIS.sistema=VIS.cb; guardarLS("conv-capas2",VIS); pintar(); };
@@ -327,7 +330,11 @@ function dibujarEn(v, f, foco){
         dashArray: c.region==="lejano" ? "5 5" : null}).addTo(v.celdas);
       pol.bindTooltip(`<b style="color:${col}">${TIPOS[c.tipo].n}</b> · ${c.lugar}<br>Tope mínimo ${c.tmin} °C · medio ${c.tmed} °C<br>${textoRayos(c.rayos)} · ${textoArea(c.area)}<br>${c.tendencia?TEND[c.tendencia]:""}${c.dT10!=null?` (${c.dT10>0?"+":""}${c.dT10} °C/10 min)`:""}`,
         {className:"info", sticky:true});
-      pol.on("click",()=>{ sel=c.id; detener(); idx=datos.frames.length-1; pintar(); listar(); });
+      pol.on("click",()=>{ abrirFoco(c.id); });
+      if (v.grande){
+        pol.on("mouseover",()=>{ clearTimeout(tHover); if (VIS.foco) tHover = setTimeout(()=>abrirFoco(c.id), 350); });
+        pol.on("mouseout",()=>clearTimeout(tHover));
+      }
     });
     const etiquetar = TIPOS[c.tipo].corto && c.region!=="lejano" && (c.region==="chile" || CONVECTIVO.includes(c.tipo)) && (v.grande || elegido);
     if (etiquetar){
@@ -341,16 +348,17 @@ function dibujarEn(v, f, foco){
 }
 
 /* Celda que muestra el recuadro de foco */
+let tHover = null;
 function elegirFoco(){
-  const ult = datos.frames[datos.frames.length-1].celdas;
-  if (sel!=null){ const c = ult.find(x=>x.id===sel); if (c) return c; }
-  const ch = ult.filter(c=>c.region==="chile" && CONVECTIVO.includes(c.tipo)).sort((a,b)=>a.tmin-b.tmin);
-  if (ch.length) return ch[0];
-  const mo = ult.filter(c=>c.region==="chile" && c.tipo==="moderada").sort((a,b)=>a.tmin-b.tmin);
-  if (mo.length) return mo[0];
-  const ar = ult.filter(c=>c.region==="vecinos" && CONVECTIVO.includes(c.tipo)).sort((a,b)=>(b.rayos||0)-(a.rayos||0) || a.tmin-b.tmin);
-  return ar[0] || null;
+  if (sel==null) return null;
+  for (let i = datos.frames.length-1; i >= 0; i--){
+    const c = datos.frames[i].celdas.find(x=>x.id===sel); if (c) return c;
+  }
+  return null;
 }
+function abrirFoco(id){ if (sel===id) return; sel = id; focoId = null; pintar(); listar(); }
+function cerrarFoco(){ clearTimeout(tHover); sel = null; focoId = null; pintar(); listar(); }
+document.getElementById("focoCerrar").onclick = cerrarFoco;
 
 let focoId = null;
 function pintar(){
@@ -358,7 +366,7 @@ function pintar(){
   const f = datos.frames[idx];
   dibujarEn(P, f, null);
   const fc = elegirFoco(), caja = document.getElementById("foco");
-  if (fc && VIS.foco){
+  if (fc){
     caja.hidden = false;
     caja.style.setProperty("--c", `var(${TIPOS[fc.tipo].c})`);
     document.getElementById("focoTit").textContent = `${TIPOS[fc.tipo].n} · ${fc.lugar}`;
@@ -399,7 +407,7 @@ function listar(){
     b.innerHTML = `<i></i><span><span class="t">${TIPOS[c.tipo].n}</span> <span class="lg">· ${c.lugar}</span></span>
       <span class="tend ${c.tendencia||""}">${TEND[c.tendencia]||""}</span>
       <span class="d">${c.tmin} °C · ${textoRayos(c.rayos)} · ${textoArea(c.area)}${c.tipo.startsWith("frontal")?` · ${c.largo} km`:""}</span>`;
-    b.onclick = ()=>{ sel = sel===c.id ? null : c.id; detener(); idx=datos.frames.length-1; focoId=null; pintar(); listar(); };
+    b.onclick = ()=>{ if (sel===c.id) cerrarFoco(); else { abrirFoco(c.id); P.mapa.panTo([c.lat,c.lon]); } };
     box.appendChild(b);
   };
   const principales = chile.filter(c=>c.tipo!=="alta"), altas = chile.filter(c=>c.tipo==="alta");
@@ -441,7 +449,7 @@ document.addEventListener("keydown",e=>{
   if (e.key===" "){ e.preventDefault(); play?detener():iniciar(); }
   if (e.key==="ArrowLeft") document.getElementById("bAtras").click();
   if (e.key==="ArrowRight") document.getElementById("bAdel").click();
-  if (e.key==="Escape"){ sel=null; focoId=null; pintar(); listar(); }
+  if (e.key==="Escape") cerrarFoco();
 });
 P.mapa.on("zoomend", ()=>pintarLugares(P));
 /* que el mapa nunca muestre zonas sin imagen */
