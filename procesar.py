@@ -34,6 +34,9 @@ LAT_MIN, LAT_MAX = -62.0, -10.0
 ANCHO = 2000                           # píxeles de la imagen (~4 km por píxel)
 LON_VECINOS = -53.0                    # al este de esto no se detecta (Atlántico, Brasil)
 UMBRAL = -40.0                         # °C: tope frío que define un objeto
+UMBRAL_SOMERO = -10.0                  # °C: convección somera (cúmulos en desarrollo)
+ENFRIA = -1.5                          # °C/10 min: enfriamiento mínimo en cada uno de los dos últimos intervalos
+ENFRIA_TOTAL = -4.0                    # °C: enfriamiento mínimo sumando esos dos intervalos
 AREA_MIN = 250.0                       # km²
 ZONA_MAR_KM = 300.0                    # Pacífico cercano que también cuenta
 FRAMES = 12                            # imágenes del loop (2 horas)
@@ -345,6 +348,89 @@ def detectar(T, LON, LAT, px_km, m_chile, m_tierra, zona, rayos, m_pais=None, no
     return celdas
 
 
+# ---------------- Convección somera y rayos sin nube fría ----------------
+def a_pixel(la, lo, alto):
+    col = np.clip(((np.asarray(lo) - LON_MIN) / (LON_MAX - LON_MIN) * ANCHO).astype(int), 0, ANCHO - 1)
+    ym0, ym1 = merc_y(LAT_MIN), merc_y(LAT_MAX)
+    fil = np.clip(((ym1 - merc_y(np.asarray(la))) / (ym1 - ym0) * alto).astype(int), 0, alto - 1)
+    return fil, col
+
+def contorno_de(m, sl, alto):
+    sub = np.pad(m.astype("f4"), 1); polis = []
+    for cnt in sorted(find_contours(sub, 0.5), key=len, reverse=True)[:2]:
+        if len(cnt) < 4: continue
+        cnt = approximate_polygon(cnt, tolerance=0.6)
+        fil = cnt[:, 0] - 1 + sl[0].start; col = cnt[:, 1] - 1 + sl[1].start
+        polis.append([[round(float(a), 3), round(float(b), 3)] for a, b in zip(fila_a_lat(fil, alto), col_a_lon(col))])
+    return polis
+
+def detectar_somera(T, LON, LAT, px_km, m_chile, m_tierra, zona, rayos):
+    """Nubes compactas con tope entre −10 y −40 °C sobre Chile (candidatas), y grupos de rayos sin nube detectada."""
+    alto = T.shape[0]
+    area_px = (px_km ** 2)[:, None] * np.ones_like(T)
+    tibia = np.isfinite(T) & (T <= UMBRAL_SOMERO)
+    etq, n = ndimage.label(tibia, structure=np.ones((3, 3)))
+    conteo = np.zeros(n + 1, int)
+    if rayos is not None and len(rayos[0]):
+        fil, col = a_pixel(rayos[0], rayos[1], alto)
+        np.add.at(conteo, ndimage.maximum_filter(etq, size=5)[fil, col], 1)
+    res = []
+    for i, sl in enumerate(ndimage.find_objects(etq), start=1):
+        if sl is None: continue
+        m = etq[sl] == i
+        Ti = T[sl][m]
+        if np.nanmin(Ti) <= UMBRAL: continue                 # ya la cubre la detección principal
+        if not zona[sl][m].any(): continue                     # solo Chile y Pacífico cercano
+        area = float(area_px[sl][m].sum())
+        if area < 30 or area > 15000: continue
+        yy, xx = np.nonzero(m); la = LAT[sl][m]; lo = LON[sl][m]
+        if yy.size > 3:
+            X = np.stack([np.radians(lo) * R_TIERRA * math.cos(math.radians(float(la.mean()))), np.radians(la) * R_TIERRA])
+            ev = np.maximum(np.sort(np.linalg.eigvalsh(np.cov(X)))[::-1], 1.0)
+            if math.sqrt(ev[0] / ev[1]) >= 3.0: continue      # alargada: no es un cúmulo
+        frio = Ti <= np.nanpercentile(Ti, 15)
+        lat_n, lon_n = float(la[frio].mean()), float(lo[frio].mean())
+        res.append({"tipo": "somera", "lejano": False, "region": "chile",
+                    "lugar": lugar(lat_n, lon_n, bool(m_tierra[sl][m].mean() > .5), True),
+                    "lat": round(lat_n, 3), "lon": round(lon_n, 3),
+                    "tmin": round(float(np.nanmin(Ti)), 1), "tmed": round(float(np.nanmean(Ti)), 1), "desv": round(float(np.nanstd(Ti)), 1),
+                    "area": int(area), "nucleo": 0, "largo": 0, "razon": 1.0,
+                    "rayos": int(conteo[i]) if rayos is not None else None, "contorno": contorno_de(m, sl, alto)})
+    # rayos sobre Chile que no caen en ninguna nube de −10 °C o menos
+    if rayos is not None and len(rayos[0]):
+        fil, col = a_pixel(rayos[0], rayos[1], alto)
+        sueltos = zona[fil, col] & (ndimage.maximum_filter(etq, size=5)[fil, col] == 0)
+        if sueltos.any():
+            la, lo = rayos[0][sueltos], rayos[1][sueltos]
+            grupos = {}
+            for x_, y_ in zip(la, lo):
+                grupos.setdefault((round(x_ * 4) / 4, round(y_ * 4) / 4), []).append((x_, y_))
+            for pts in grupos.values():
+                if len(pts) < 2: continue
+                plat = float(np.mean([p[0] for p in pts])); plon = float(np.mean([p[1] for p in pts]))
+                r = 15 / 111.0
+                circ = [[round(plat + r * math.sin(a), 3), round(plon + r * math.cos(a) / math.cos(math.radians(plat)), 3)]
+                        for a in np.linspace(0, 2 * math.pi, 16, endpoint=False)]
+                ff, cc = a_pixel(plat, plon, alto)
+                res.append({"tipo": "tormenta", "lejano": False, "region": "chile", "lugar": lugar(plat, plon, bool(m_tierra[ff, cc]), True),
+                            "lat": round(plat, 3), "lon": round(plon, 3), "tmin": None, "tmed": None, "desv": None,
+                            "area": 0, "nucleo": 0, "largo": 0, "razon": 1.0, "rayos": len(pts), "contorno": [circ], "sin_nube": True})
+    return res
+
+def clasificar_somera(celdas):
+    """Después del seguimiento: decide si cada candidata es tormenta, cúmulo en desarrollo o se oculta."""
+    for c in celdas:
+        if c["tipo"] != "somera": continue
+        tr = [p for p in (c.get("traza") or []) if len(p) >= 4 and p[3] is not None]
+        enfr = (len(tr) >= 3 and (tr[-1][3] - tr[-2][3]) <= ENFRIA and (tr[-2][3] - tr[-3][3]) <= ENFRIA
+                and (tr[-1][3] - tr[-3][3]) <= ENFRIA_TOTAL)
+        if (c.get("rayos") or 0) >= 1:
+            c["tipo"] = "tormenta"
+        elif enfr:
+            c["tipo"] = "desarrollo"
+        else:
+            c["oculta"] = True; c["contorno"] = []
+
 # ---------------- Seguimiento entre imágenes ----------------
 def dkm(a, b):
     p = math.radians
@@ -352,11 +438,16 @@ def dkm(a, b):
 
 def seguir(celdas, previas, dt_min, sig_id, t_iso):
     usadas = set()
-    for c in sorted(celdas, key=lambda c: c["tmin"]):
+    for c in sorted(celdas, key=lambda c: c["tmin"] if c["tmin"] is not None else 99):
+        fam = lambda x: "frontal" if x["tipo"].startswith("frontal") else "conv"
         cand = [(dkm((c["lat"], c["lon"]), (p["lat"], p["lon"])), j, p) for j, p in enumerate(previas)
-                if j not in usadas and p["tipo"].startswith("frontal") == c["tipo"].startswith("frontal")]
+                if j not in usadas and fam(p) == fam(c) and p.get("tmin") is not None and c.get("tmin") is not None]
         lim = (180.0 if c["tipo"].startswith("frontal") else 70.0) * max(dt_min, 10) / 10.0
         cand = [x for x in cand if x[0] <= lim]
+        if c.get("tmin") is None:                             # grupo de rayos sin nube: no se sigue
+            c["id"] = sig_id; sig_id += 1; c["tendencia"] = "nueva"; c["dT10"] = None; c["dA10"] = None
+            c["traza"] = [[c["lat"], c["lon"], t_iso, None, 0, c["rayos"]]]
+            continue
         if cand and dt_min > 0:
             _, j, p = min(cand, key=lambda x: x[0]); usadas.add(j)
             c["id"] = p["id"]
@@ -423,6 +514,7 @@ def cargar_previo(dir_datos, sitio_url):
 def procesar_escena(T, rayos, t, prev, LON, LAT, px_km, mascs, dir_datos):
     m_chile, m_tierra, zona, m_pais, nombres = mascs
     celdas = detectar(T, LON, LAT, px_km, m_chile, m_tierra, zona, rayos, m_pais, nombres)
+    celdas += detectar_somera(T, LON, LAT, px_km, m_chile, m_tierra, zona, rayos)
     lim = [[LAT_MIN, LON_MIN], [LAT_MAX, LON_MAX]]
     frames = [f for f in (prev or {}).get("frames", [])
               if f["t"] != t.strftime("%Y-%m-%dT%H:%MZ") and f.get("lim") == lim]   # descarta imágenes con otra cobertura
@@ -430,6 +522,7 @@ def procesar_escena(T, rayos, t, prev, LON, LAT, px_km, mascs, dir_datos):
     dt = (t - datetime.strptime(frames[-1]["t"], "%Y-%m-%dT%H:%MZ").replace(tzinfo=timezone.utc)).total_seconds() / 60 if frames else 0
     if dt > 40: previas = []                                          # hueco grande: no seguir
     sig = seguir(celdas, previas, dt, (prev or {}).get("sig_id", 1), t.strftime("%H:%M"))
+    clasificar_somera(celdas)
     nombre = f"frames/ir_{t:%Y%m%d%H%M}.png"
     os.makedirs(os.path.join(dir_datos, "frames"), exist_ok=True)
     img = Image.fromarray(colorear(T), "RGBA").quantize(colors=200, method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE)
@@ -471,8 +564,9 @@ def analizar(horas, LON, LAT, px_km, mascs, dir_out, punto=("Santiago", -33.45, 
         rayos = rayos_glm(t)
         m_chile, m_tierra, zona, m_pais, nombres = mascs
         celdas = detectar(T, LON, LAT, px_km, m_chile, m_tierra, zona, rayos, m_pais, nombres)
+        celdas += detectar_somera(T, LON, LAT, px_km, m_chile, m_tierra, zona, rayos)
         dt = (t - prev_t).total_seconds() / 60 if prev_t else 0
-        seguir(celdas, previas, dt, 1000, t.strftime("%H:%M")); previas, prev_t = celdas, t
+        seguir(celdas, previas, dt, 1000, t.strftime("%H:%M")); clasificar_somera(celdas); previas, prev_t = celdas, t
         # diagnóstico alrededor del punto
         nom, plat, plon = punto
         d = 2 * R_TIERRA * np.arcsin(np.sqrt(np.sin(np.radians(LAT - plat) / 2) ** 2 + np.cos(np.radians(plat)) * np.cos(np.radians(LAT)) * np.sin(np.radians(LON - plon) / 2) ** 2))
@@ -489,14 +583,17 @@ def analizar(horas, LON, LAT, px_km, mascs, dir_out, punto=("Santiago", -33.45, 
              f"percentil 10: {np.nanpercentile(Tc,10):.1f} °C · mediana {np.nanmedian(Tc):.1f} °C · "
              f"píxeles ≤ −40 °C: {100*np.mean(Tc<=-40):.0f} % · ≤ −20 °C: {100*np.mean(Tc<=-20):.0f} % · "
              f"rayos GLM: {n_ray if rayos is not None else 's/d'}"]
-        cz = [c for c in celdas if c["region"] == "chile" and -38.5 <= c["lat"] <= -29.5]
+        cz = [c for c in celdas if c["region"] == "chile" and -38.5 <= c["lat"] <= -29.5 and not c.get("oculta")]
         if cz:
             r.append("Objetos detectados en la zona central (−29,5° a −38,5°):")
-            for c in sorted(cz, key=lambda c: c["tmin"]):
+            for c in sorted(cz, key=lambda c: c["tmin"] if c["tmin"] is not None else 99):
                 r.append(f"- {c['tipo']} · {c['lugar']} · tope mín {c['tmin']} °C · medio {c['tmed']} °C · desv {c['desv']} · "
                          f"{c['area']} km² · rayos {c['rayos']} · {c.get('tendencia')} ({c.get('dT10')} °C/10 min)")
         else:
-            r.append("Ningún objeto con tope ≤ −40 °C en la zona central.")
+            r.append("Ningún objeto marcado en la zona central.")
+        for c in [c for c in celdas if c.get("oculta") and abs(c["lat"] - plat) < 1 and abs(c["lon"] - plon) < 1.2]:
+            tr = [p[3] for p in c.get("traza", []) if len(p) >= 4]
+            r.append(f"  (candidata no marcada · {c['lugar']} · tope {c['tmin']} °C · {c['area']} km² · historia {tr})")
         informe += r
         # recorte de la zona central con contornos y rayos
         ym0, ym1 = merc_y(LAT_MIN), merc_y(LAT_MAX)
@@ -509,7 +606,7 @@ def analizar(horas, LON, LAT, px_km, mascs, dir_out, punto=("Santiago", -33.45, 
         X = lambda lo_: (col(lo_) - c0) * k; Y = lambda la_: (fila(la_) - f0) * k
         for cel in cz:
             colr = {"cb": (255, 90, 95), "sistema": (255, 90, 95), "frontal_conv": (255, 159, 67), "moderada": (242, 180, 65),
-                    "frontal": (92, 200, 230), "alta": (169, 184, 255)}[cel["tipo"]]
+                    "frontal": (92, 200, 230), "alta": (169, 184, 255), "tormenta": (255, 90, 95), "desarrollo": (255, 209, 102)}[cel["tipo"]]
             for anillo in cel["contorno"]:
                 dr.line([(X(p[1]), Y(p[0])) for p in anillo] + [(X(anillo[0][1]), Y(anillo[0][0]))], fill=colr, width=3)
         if rayos is not None:

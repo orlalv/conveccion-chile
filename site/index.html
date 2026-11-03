@@ -12,7 +12,7 @@
 /* Sala de monitoreo: mapa grande con recuadro de foco, lista de celdas a la derecha, línea de tiempo abajo */
 :root{
   --bg:#0a0f13; --panel:#10171d; --panel2:#141d24; --line:#21303a; --fg:#e4ecf0; --muted:#89a0ad; --dim:#5d7280;
-  --cb:#ff5a5f; --fconv:#ff9f43; --mod:#f2b441; --alta:#a9b8ff; --front:#5cc8e6; --ok:#7fd99a; --accent:#5cc8e6; --rayo:#9fdcff;
+  --cb:#ff5a5f; --dev:#ffd166; --fconv:#ff9f43; --mod:#f2b441; --alta:#a9b8ff; --front:#5cc8e6; --ok:#7fd99a; --accent:#5cc8e6; --rayo:#9fdcff;
   --ui:"IBM Plex Sans Condensed","Arial Narrow",Arial,sans-serif; --mono:"IBM Plex Mono",Consolas,monospace;
   color-scheme:dark;
 }
@@ -97,7 +97,7 @@ footer{padding:6px 14px 8px;border-top:1px solid var(--line);font-size:11px;colo
 .leaflet-tooltip.etq{background:rgba(10,15,19,.9);border:1px solid var(--c);color:var(--fg);font-family:var(--mono);font-size:12px;padding:2px 6px;border-radius:0;box-shadow:none;white-space:nowrap}
 .leaflet-tooltip.etq::before{display:none}
 .leaflet-tooltip.etq b{color:var(--c);font-weight:500}
-.t-cb,.t-sistema{--c:var(--cb)} .t-moderada{--c:var(--mod)} .t-frontal_conv{--c:var(--fconv)}
+.t-cb,.t-sistema,.t-tormenta{--c:var(--cb)} .t-desarrollo{--c:var(--dev)} .t-moderada{--c:var(--mod)} .t-frontal_conv{--c:var(--fconv)}
 .leaflet-tooltip.info{background:#0a0f13;border:1px solid var(--line);color:var(--fg);font-family:var(--ui);font-size:13px;border-radius:0;box-shadow:none;line-height:1.45}
 .leaflet-tooltip.lugar{background:none;border:0;box-shadow:none;color:#dfe8ec;font-size:12px;padding:0;text-shadow:0 0 3px #000,0 0 3px #000,0 0 2px #000}
 .leaflet-tooltip.lugar.x{color:#b5c2c9}
@@ -177,9 +177,12 @@ const TIPOS = {
   frontal_conv: {n:"Frontal con convección", c:"--fconv", orden:1, corto:"F+C"},
   moderada:     {n:"Convección moderada",    c:"--mod",   orden:2, corto:"Mod."},
   frontal:      {n:"Banda frontal",          c:"--front", orden:3},
-  alta:         {n:"Nubosidad alta",         c:"--alta",  orden:4}
+  alta:         {n:"Nubosidad alta",         c:"--alta",  orden:4},
+  tormenta:     {n:"Tormenta (tope tibio)",  c:"--cb",    orden:0, corto:"TS"},
+  desarrollo:   {n:"Cúmulo en desarrollo",   c:"--dev",   orden:2, corto:"Dev."}
 };
-const CONVECTIVO = ["cb","sistema","frontal_conv"];
+const CONVECTIVO = ["cb","sistema","frontal_conv","tormenta"];
+const SOMERA = ["tormenta","desarrollo"];
 const TEND = {creciendo:"↑ creciendo", disipando:"↓ disipando", estable:"→ estable", nueva:"• nueva"};
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const Q = new URLSearchParams(location.search);
@@ -283,9 +286,9 @@ function marcarZona(){ zonasBox.querySelectorAll("button").forEach(b=>b.classLis
 marcarZona();
 
 /* ---------- Capas activables ---------- */
-const VIS = Object.assign({cb:true, sistema:true, frontal_conv:true, moderada:true, frontal:true, alta:false, lejano:true, vecinos:true, rayos:true, trazas:true, foco:true}, leerLS("conv-capas2",{}));
+const VIS = Object.assign({somera:true, cb:true, sistema:true, frontal_conv:true, moderada:true, frontal:true, alta:false, lejano:true, vecinos:true, rayos:true, trazas:true, foco:true}, leerLS("conv-capas2",{}));
 const capasBox = document.getElementById("capas");
-[["cb","CB y sistemas","--cb"],["frontal_conv","Frontal + conv.","--fconv"],["moderada","Moderada","--mod"],["frontal","Frontal","--front"],
+[["cb","CB y sistemas","--cb"],["frontal_conv","Frontal + conv.","--fconv"],["moderada","Moderada","--mod"],["somera","Convección somera","--dev"],["frontal","Frontal","--front"],
  ["alta","Nub. alta","--alta"],["vecinos","Argentina","--muted"],["lejano","Pacífico lejano","--dim"],["rayos","Rayos","--rayo"],["trazas","Trayectorias","--fg"],["foco","Ventana al pasar el mouse","--fg"]].forEach(([k,t,c])=>{
   const l = document.createElement("label");
   l.innerHTML = `<input type="checkbox" id="cap-${k}" ${VIS[k]?"checked":""}><span class="sw" style="--c:var(${c})"></span>${t}`;
@@ -293,6 +296,8 @@ const capasBox = document.getElementById("capas");
   capasBox.appendChild(l);
 });
 function visible(c){
+  if (c.oculta) return false;
+  if (SOMERA.includes(c.tipo)) return VIS.somera;
   if (!VIS[c.tipo]) return false;
   if (c.region==="lejano") return VIS.lejano;
   if (c.region==="vecinos") return VIS.vecinos;
@@ -304,7 +309,11 @@ let datos = null, idx = 0, sel = null, play = TV, tPlay = null, verAltas = false
 
 /* Minigráfica de la evolución de una celda: tope mínimo, área y rayos */
 function grafico(c){
-  const h = (c.traza||[]).filter(p=>p.length>=5);
+  if (c.sin_nube) return `<p>Grupo de <b>${c.rayos} rayos</b> GLM sobre Chile sin una nube de −10 °C o menos asociada. Puede ser una celda muy chica que el satélite no resuelve bien.</p>`;
+  const h = (c.traza||[]).filter(p=>p.length>=5 && p[3]!=null);
+  let motivo = "";
+  if (c.tipo==="tormenta") motivo = `<p><b>Tormenta</b> porque tiene ${textoRayos(c.rayos)} aunque su tope (${c.tmin} °C) no llega a −40 °C.</p>`;
+  if (c.tipo==="desarrollo") motivo = `<p><b>Cúmulo en desarrollo</b> porque su tope se enfrió en las dos últimas imágenes: al menos 1,5 °C cada vez y 4 °C o más en total.</p>`;
   const fmt = (v,d=1)=>(v>0?"+":"")+v.toFixed(d).replace(".",",");
   let expl;
   if (c.tendencia==="nueva" || c.dT10==null){
@@ -317,6 +326,7 @@ function grafico(c){
       Área: <b>${c.dA10!=null?fmt(c.dA10,0)+" %":"s/d"}</b> en 10 min <small>(umbral ±25 %)</small><br>
       → <b>${c.tendencia}</b>${por?` porque ${por}.`:": ningún cambio supera los umbrales."}</p>`;
   }
+  expl = motivo + expl;
   if (h.length < 2) return expl + `<p><small>La gráfica aparece desde la segunda imagen en que se sigue esta celda.</small></p>`;
   const W=280, H=96, iz=34, de=8, ar=8, ab=18, n=h.length;
   const x = i => iz + (W-iz-de) * (n===1?0:i/(n-1));
@@ -375,8 +385,8 @@ function dibujarEn(v, f, foco){
     c.contorno.forEach(anillo=>{
       L.polygon(anillo, {color:"#000", weight:ancho+2.5, opacity:tenue?.3:.55, fill:false, interactive:false}).addTo(v.celdas);
       const pol = L.polygon(anillo, {color:col, weight:elegido?ancho+1:ancho, opacity:tenue?.6:.95, fill:true, fillOpacity:elegido?.16:.04,
-        dashArray: c.region==="lejano" ? "5 5" : null}).addTo(v.celdas);
-      pol.bindTooltip(`<b style="color:${col}">${TIPOS[c.tipo].n}</b> · ${c.lugar}<br>Tope mínimo ${c.tmin} °C · medio ${c.tmed} °C<br>${textoRayos(c.rayos)} · ${textoArea(c.area)}<br>${c.tendencia?TEND[c.tendencia]:""}${c.dT10!=null?` (${c.dT10>0?"+":""}${c.dT10} °C/10 min)`:""}`,
+        dashArray: c.region==="lejano" ? "5 5" : c.tipo==="desarrollo" ? "4 3" : null}).addTo(v.celdas);
+      pol.bindTooltip(`<b style="color:${col}">${TIPOS[c.tipo].n}</b> · ${c.lugar}<br>${c.sin_nube?"Rayos sin nube fría detectada":`Tope mínimo ${c.tmin} °C · medio ${c.tmed} °C`}<br>${textoRayos(c.rayos)} · ${textoArea(c.area)}<br>${c.tendencia?TEND[c.tendencia]:""}${c.dT10!=null?` (${c.dT10>0?"+":""}${c.dT10} °C/10 min)`:""}`,
         {className:"info", sticky:true});
       pol.on("click",()=>{ abrirFoco(c.id); });
       if (v.grande){
@@ -388,7 +398,7 @@ function dibujarEn(v, f, foco){
     if (etiquetar){
       const flecha = {creciendo:"↑",disipando:"↓",estable:"→",nueva:"•"}[c.tendencia]||"";
       L.marker([c.lat,c.lon],{opacity:0,interactive:false}).addTo(v.celdas)
-       .bindTooltip(`<b>${TIPOS[c.tipo].corto}</b> ${c.tmin}° ${flecha}`, {permanent:true, direction:"right", offset:[8,0], className:"etq t-"+c.tipo});
+       .bindTooltip(`<b>${TIPOS[c.tipo].corto}</b> ${c.tmin!=null?c.tmin+"°":""} ${c.tipo==="tormenta"?"⚡":flecha}`, {permanent:true, direction:"right", offset:[8,0], className:"etq t-"+c.tipo});
     }
     if (VIS.trazas && c.traza && c.traza.length>1)
       L.polyline(c.traza.map(p=>[p[0],p[1]]),{color:col,weight:2,opacity:.8,dashArray:"2 4",interactive:false}).addTo(v.trazas);
@@ -437,13 +447,14 @@ function pintar(){
 function listar(){
   const f = datos.frames[datos.frames.length-1];
   const box = document.getElementById("lista"); box.innerHTML = "";
-  const orden = (a,b)=>TIPOS[a.tipo].orden-TIPOS[b.tipo].orden || a.tmin-b.tmin;
-  const chile = f.celdas.filter(c=>c.region==="chile").sort(orden);
+  const orden = (a,b)=>TIPOS[a.tipo].orden-TIPOS[b.tipo].orden || (a.tmin??0)-(b.tmin??0);
+  const chile = f.celdas.filter(c=>c.region==="chile" && !c.oculta).sort(orden);
   const vecinos = f.celdas.filter(c=>c.region==="vecinos" && c.tipo!=="alta").sort(orden);
   const lejos = f.celdas.filter(c=>c.region==="lejano");
   const conv = chile.filter(c=>CONVECTIVO.includes(c.tipo));
   const est = document.getElementById("estado"), sub = document.getElementById("estadoSub");
   if (conv.length){ est.className="estado alerta"; est.textContent = `${conv.length} ${conv.length===1?"núcleo convectivo activo":"núcleos convectivos activos"}`; sub.textContent = "TS, SH y granizo esperables bajo los núcleos."; }
+  else if (chile.some(c=>c.tipo==="desarrollo")){ est.className="estado aviso"; est.textContent="Cúmulos en desarrollo"; sub.textContent="Nubes que crecen rápido: posibles chubascos en la próxima hora."; }
   else if (chile.some(c=>c.tipo==="moderada")){ est.className="estado aviso"; est.textContent="Convección moderada, sin CB"; sub.textContent="Posibles chubascos; un TS reportado conviene revisarlo."; }
   else { est.className="estado ok"; est.textContent="Sin convección en Chile"; sub.textContent="Un TS o SH reportado ahora sería sospechoso."; }
   if (!f.rayos) sub.textContent += " Rayos GLM no disponibles en esta imagen.";
@@ -456,7 +467,7 @@ function listar(){
     const abierta = grafAbierta===c.id;
     b.innerHTML = `<i></i><span><span class="t">${TIPOS[c.tipo].n}</span> <span class="lg">· ${c.lugar}</span></span>
       <button type="button" class="tend ${c.tendencia||""}${abierta?" abierta":""}" aria-expanded="${abierta}" title="Ver por qué">${TEND[c.tendencia]||""}</button>
-      <span class="d">${c.tmin} °C · ${textoRayos(c.rayos)} · ${textoArea(c.area)}${c.tipo.startsWith("frontal")?` · ${c.largo} km`:""}</span>
+      <span class="d">${c.sin_nube ? `${textoRayos(c.rayos)} sin nube fría` : `${c.tmin} °C · ${textoRayos(c.rayos)} · ${textoArea(c.area)}`}${c.tipo.startsWith("frontal")?` · ${c.largo} km`:""}</span>
       ${abierta ? `<div class="graf">${grafico(c)}</div>` : ""}`;
     const ir = ()=>{ if (sel===c.id) cerrarFoco(); else { abrirFoco(c.id); P.mapa.panTo([c.lat,c.lon]); } };
     b.onclick = e=>{ if (e.target.closest(".graf")) return; ir(); };
