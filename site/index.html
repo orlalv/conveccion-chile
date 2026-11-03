@@ -312,7 +312,8 @@ function pintarLugares(v){
 
 /* Dibuja la imagen y las celdas de un frame en un mapa */
 function dibujarEn(v, f, foco){
-  if (datos.limites){ v.sat.setBounds(L.latLngBounds(datos.limites)); }
+  const lim = f.lim || datos.limites;
+  if (lim){ v.sat.setBounds(L.latLngBounds(lim)); }
   v.sat.setUrl("data/"+f.img+"?v="+datos.generado);
   v.celdas.clearLayers(); v.trazas.clearLayers();
   v.rayos.visible = VIS.rayos; v.rayos.poner(f.rp);

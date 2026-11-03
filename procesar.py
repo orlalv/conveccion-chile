@@ -423,7 +423,9 @@ def cargar_previo(dir_datos, sitio_url):
 def procesar_escena(T, rayos, t, prev, LON, LAT, px_km, mascs, dir_datos):
     m_chile, m_tierra, zona, m_pais, nombres = mascs
     celdas = detectar(T, LON, LAT, px_km, m_chile, m_tierra, zona, rayos, m_pais, nombres)
-    frames = [f for f in (prev or {}).get("frames", []) if f["t"] != t.strftime("%Y-%m-%dT%H:%MZ")]
+    lim = [[LAT_MIN, LON_MIN], [LAT_MAX, LON_MAX]]
+    frames = [f for f in (prev or {}).get("frames", [])
+              if f["t"] != t.strftime("%Y-%m-%dT%H:%MZ") and f.get("lim") == lim]   # descarta imágenes con otra cobertura
     previas = frames[-1]["celdas"] if frames else []
     dt = (t - datetime.strptime(frames[-1]["t"], "%Y-%m-%dT%H:%MZ").replace(tzinfo=timezone.utc)).total_seconds() / 60 if frames else 0
     if dt > 40: previas = []                                          # hueco grande: no seguir
@@ -438,7 +440,7 @@ def procesar_escena(T, rayos, t, prev, LON, LAT, px_km, mascs, dir_datos):
         if idx.size > 2500:
             idx = np.random.default_rng(0).choice(idx, 2500, replace=False)
         rp = [[round(float(rayos[0][i]), 2), round(float(rayos[1][i]), 2)] for i in idx]
-    frames.append({"t": t.strftime("%Y-%m-%dT%H:%MZ"), "img": nombre, "rayos": rayos is not None,
+    frames.append({"t": t.strftime("%Y-%m-%dT%H:%MZ"), "img": nombre, "rayos": rayos is not None, "lim": lim,
                    "rp": rp, "celdas": celdas})
     frames = frames[-FRAMES:]
     vigentes = {f["img"] for f in frames}
