@@ -21,6 +21,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
+import sat_estaciones as SE
 import requests
 from PIL import Image
 from scipy import ndimage
@@ -652,6 +653,7 @@ def main():
         prev["demo"] = True
     else:
         prev = cargar_previo(a.salida, a.sitio_url)
+        sat = SE.cargar(a.salida, a.sitio_url, UA)
         ahora = datetime.now(timezone.utc)
         lista = archivos("ABI-L2-CMIPF", "M6C13_G19", ahora - timedelta(hours=2), ahora)
         if not lista:
@@ -660,12 +662,19 @@ def main():
         t = t.replace(second=0, microsecond=0)
         if prev and prev.get("frames") and prev["frames"][-1]["t"] == t.strftime("%Y-%m-%dT%H:%MZ"):
             print("Sin imagen nueva; se mantiene la publicación anterior.")
+            SE.guardar(a.salida, sat)
             json.dump(prev, open(os.path.join(a.salida, "index.json"), "w"), ensure_ascii=False, separators=(",", ":"))
             return
         print("Imagen:", clave)
-        T = banda13(bajar(clave), LON, LAT)
+        c13 = bajar(clave)
+        T = banda13(c13, LON, LAT)
         rayos = rayos_glm(t)
         prev = procesar_escena(T, rayos, t, prev, LON, LAT, px_km, mascs, a.salida)
+        try:                                   # resumen por estación para el control de calidad (no detiene el visor si falla)
+            sat = SE.actualizar(sat, t, c13, rayos, BASE, Geo, archivos, bajar)
+        except Exception as ex:
+            print("  aviso: resumen satelital falló:", ex)
+        SE.guardar(a.salida, sat)
 
     json.dump(prev, open(os.path.join(a.salida, "index.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     ult = prev["frames"][-1]["celdas"]
