@@ -67,7 +67,7 @@ aside{border-left:1px solid var(--line);background:var(--panel);display:flex;fle
 .cel .tend{font:inherit;font-family:var(--mono);font-size:12px;background:none;border:1px solid transparent;padding:1px 5px;cursor:pointer;align-self:start;white-space:nowrap}
 .cel .tend:hover,.cel .tend.abierta{border-color:currentColor}
 .graf{grid-column:2/4;margin-top:8px;border-top:1px solid var(--line);padding-top:8px;cursor:default}
-.graf svg{width:100%;height:auto;display:block}
+.graf svg{width:100%;height:auto;display:block;overflow:visible}
 .graf svg text{font-family:var(--mono);font-size:10px;fill:var(--muted)}
 .graf p{margin:6px 0 0;font-size:12.5px;line-height:1.45;color:var(--fg)}
 .graf p small{color:var(--muted);font-size:12px}
@@ -328,7 +328,7 @@ function grafico(c){
   }
   expl = motivo + expl;
   if (h.length < 2) return expl + `<p><small>La gráfica aparece desde la segunda imagen en que se sigue esta celda.</small></p>`;
-  const W=280, H=96, iz=34, de=8, ar=8, ab=18, n=h.length;
+  const W=300, H=104, iz=34, de=34, ar=12, ab=20, n=h.length;
   const x = i => iz + (W-iz-de) * (n===1?0:i/(n-1));
   const ts = h.map(p=>p[3]), as = h.map(p=>p[4]), rs = h.map(p=>p[5]||0);
   const tmin = Math.min(...ts)-1, tmax = Math.max(...ts)+1;
@@ -344,9 +344,9 @@ function grafico(c){
     <path d="${linea(yT, ts)}" fill="none" stroke="${css("--cb")}" stroke-width="2"/>
     ${ts.map((v,i)=>`<circle cx="${x(i).toFixed(1)}" cy="${yT(v).toFixed(1)}" r="${i===n-1?3.2:2}" fill="${css("--cb")}"/>`).join("")}
     <text x="${iz-4}" y="${(yT(ts[0])+3).toFixed(1)}" text-anchor="end">${ts[0].toFixed(0)}°</text>
-    <text x="${(x(n-1)-6).toFixed(1)}" y="${Math.max(10, yT(ts[n-1])+4).toFixed(1)}" text-anchor="end">${ts[n-1].toFixed(0)}°</text>
+    <text x="${(x(n-1)+6).toFixed(1)}" y="${(yT(ts[n-1])+4).toFixed(1)}" text-anchor="start">${ts[n-1].toFixed(0)}°</text>
     <text x="${iz}" y="${H-4}">${h[0][2]}</text>
-    <text x="${W-de}" y="${H-4}" text-anchor="end">${h[n-1][2]} UTC</text>
+    <text x="${W-2}" y="${H-4}" text-anchor="end">${h[n-1][2]} UTC</text>
   </svg>`;
   const ley = `<div class="ley"><span><i style="background:${css("--cb")}"></i>tope mínimo (°C, más frío arriba)</span><span><i style="background:${css("--front")}"></i>área</span><span><i style="background:${css("--rayo")}"></i>rayos</span></div>`;
   return svg + ley + expl;
