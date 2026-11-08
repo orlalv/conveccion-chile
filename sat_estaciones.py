@@ -154,6 +154,7 @@ def producto_reciente(clave, t, archivos, bajar):
         if lista:
             tt, k = lista[-1]
             return tt, bajar(k)
+        print(f"  aviso: {clave} sin archivos entre {t - timedelta(minutes=40):%H:%M} y {t:%H:%M} ({prod}/*{patron}*)")
     except Exception as ex:
         print(f"  aviso: sin {clave}:", ex)
     return None, None
