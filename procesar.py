@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import sat_estaciones as SE
+import incendios as IN
 import requests
 from PIL import Image
 from scipy import ndimage
@@ -663,6 +664,7 @@ def main():
         if prev and prev.get("frames") and prev["frames"][-1]["t"] == t.strftime("%Y-%m-%dT%H:%MZ"):
             print("Sin imagen nueva; se mantiene la publicación anterior.")
             SE.guardar(a.salida, sat)
+            IN.mantener(os.path.dirname(a.salida.rstrip("/")), a.sitio_url)
             json.dump(prev, open(os.path.join(a.salida, "index.json"), "w"), ensure_ascii=False, separators=(",", ":"))
             return
         print("Imagen:", clave)
@@ -675,6 +677,10 @@ def main():
         except Exception as ex:
             print("  aviso: resumen satelital falló:", ex)
         SE.guardar(a.salida, sat)
+        try:                                   # incendios y humo (zona central): no detiene el visor si falla
+            IN.actualizar(t, os.path.dirname(a.salida.rstrip("/")), a.sitio_url, Geo, archivos, bajar)
+        except Exception as ex:
+            print("  aviso: incendios falló:", ex)
 
     json.dump(prev, open(os.path.join(a.salida, "index.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     ult = prev["frames"][-1]["celdas"]

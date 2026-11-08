@@ -3,3 +3,5 @@ site/geo/
 __pycache__/
 *.nc
 analisis/
+site/incendios/data.json
+site/incendios/humo.png

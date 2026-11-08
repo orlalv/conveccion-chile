@@ -49,6 +49,7 @@ jobs:
       - name: Procesar imagen del GOES-19
         env:
           SITIO_URL: ${{ steps.pages.outputs.base_url }}
+          FIRMS_KEY: ${{ secrets.FIRMS_KEY }}
         run: python procesar.py
 
       - name: Copiar límites geográficos

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Incendios y humo · METOTEC</title>
+<meta name="description" content="Focos de incendio y humo detectados por satélite en la zona central de Chile, actualizado cada 10 minutos.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{--noche:#0A1F44;--oro:#C9A54C;--tx:#e8edf5;--mu:#9fb0c8;--bd:#22365e;--panel:#0f1c3a;--rojo:#ff4d3d;--nar:#ff9f1c;--ama:#ffd23f}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font:15px/1.45 Inter,system-ui,"Segoe UI",Roboto,Arial,sans-serif;background:#0b1424;color:var(--tx);display:flex;flex-direction:column}
+header{background:radial-gradient(900px 300px at 85% 0%,#163a73 0%,var(--noche) 62%);border-bottom:3px solid var(--oro);padding:10px 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header img{height:28px}
+header h1{margin:0;font-size:17px}header h1 small{display:block;color:var(--mu);font-weight:500;font-size:12.5px}
+.sel{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mu)}
+.sel select{background:var(--panel);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:6px 8px;font:600 14px inherit}
+main{flex:1;display:grid;grid-template-columns:1fr 380px;min-height:0}
+#mapa{min-height:300px;background:#0d1418}
+aside{border-left:1px solid var(--bd);overflow:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+.estado{border-radius:12px;padding:14px 16px;border:1px solid var(--bd);background:var(--panel)}
+.estado b{display:block;font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
+.estado.n0{border-color:#2f6b4a}.estado.n0 b{color:#6fcf97}
+.estado.n1{border-color:#8a6a1f}.estado.n1 b{color:var(--ama)}
+.estado.n2{border-color:#8a2a22}.estado.n2 b{color:var(--rojo)}
+h2{font-size:14px;margin:4px 0 0;color:var(--mu);text-transform:uppercase;letter-spacing:.08em}
+.inc{background:var(--panel);border:1px solid var(--bd);border-left:4px solid var(--c);border-radius:10px;padding:10px 12px;cursor:pointer}
+.inc:hover{background:#16264a}
+.inc .t{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;color:var(--mu)}
+.inc p{margin:4px 0 0;font-size:14px}
+.vacio{color:var(--mu);font-size:14px}
+.cap{display:flex;flex-wrap:wrap;gap:6px}
+.cap label{display:flex;align-items:center;gap:5px;background:var(--panel);border:1px solid var(--bd);border-radius:999px;padding:4px 10px;font-size:12.5px;cursor:pointer}
+.ley{font-size:12.5px;color:var(--mu);display:grid;gap:4px}
+.ley i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.aviso{font-size:12.5px;color:var(--mu);border-top:1px solid var(--bd);padding-top:10px}
+.aviso b{color:var(--tx)}
+.flecha{color:#9fd3ff;font-size:16px;line-height:16px;text-align:center;text-shadow:0 0 3px #000}
+.etq{background:rgba(10,20,40,.9)!important;color:#fff!important;border:1px solid var(--oro)!important;font-size:12px!important}
+@media (max-width:900px){main{grid-template-columns:1fr;grid-template-rows:55vh auto}aside{border-left:0;border-top:1px solid var(--bd)}.sel{margin-left:0;width:100%}}
+</style>
+</head>
+<body>
+<header>
+ <a href="https://metotec.cl"><img src="logo_blanco.svg" alt="METOTEC"></a>
+ <h1>Incendios y humo · zona central<small id="act">Cargando…</small></h1>
+ <div class="sel">Mi comuna <select id="comuna"></select></div>
+</header>
+<main>
+ <div id="mapa"></div>
+ <aside>
+  <div class="estado" id="estado"><b>—</b><span>Cargando…</span></div>
+  <div class="cap">
+   <label><input type="checkbox" id="cHumo" checked> Humo</label>
+   <label><input type="checkbox" id="cViento" checked> Viento</label>
+   <label><input type="checkbox" id="cInd"> Puntos industriales</label>
+  </div>
+  <h2>Incendios detectados (últimas 24 h)</h2>
+  <div id="lista"></div>
+  <div class="ley">
+   <span><i style="background:var(--rojo)"></i>Fuego detectado hace menos de 1 hora</span>
+   <span><i style="background:var(--nar)"></i>Hace 1 a 6 horas</span>
+   <span><i style="background:var(--ama)"></i>Hace 6 a 24 horas</span>
+   <span><i style="background:#8a94a6"></i>Punto caliente industrial (no es incendio)</span>
+   <span><i style="background:rgba(205,190,160,.8);border-radius:2px"></i>Humo (solo de día)</span>
+  </div>
+  <div class="aviso"><b>Información de apoyo, no oficial.</b> El satélite detecta incendios cuando ya tienen cierto tamaño y no ve bajo las nubes: no reemplaza los avisos de CONAF ni de SENAPRED.
+   <br><b>Emergencias: CONAF 130 · Bomberos 132.</b><br>Fuentes: NOAA GOES-19 (focos y humo, cada 10 min) · NASA FIRMS (VIIRS/MODIS) · viento de Open-Meteo. Iniciativa sin fines de lucro de <a href="https://metotec.cl" style="color:var(--oro)">METOTEC</a>.</div>
+ </aside>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
+const mapa = L.map("mapa", {zoomControl: true}).setView([-34.35, -71.0], 8);
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, attribution: "Imagen © Esri"}).addTo(mapa);
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, pane: "overlayPane", opacity: .9}).addTo(mapa);
+const capas = {focos: L.layerGroup().addTo(mapa), ind: L.layerGroup(), viento: L.layerGroup().addTo(mapa), inc: L.layerGroup().addTo(mapa)};
+let humo = null, D = null;
+const leer = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const edadMin = t => (Date.now() - Date.parse(t.replace("Z", ":00Z"))) / 60000;
+const colEdad = m => m < 60 ? "#ff4d3d" : m < 360 ? "#ff9f1c" : "#ffd23f";
+const hora = t => new Date(Date.parse(t.replace("Z", ":00Z"))).toLocaleTimeString("es-CL", {hour: "2-digit", minute: "2-digit"});
+const haceTxt = m => m < 60 ? `hace ${Math.round(m)} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : "ayer";
+async function cargar(){
+  try { const r = await fetch("data.json?t=" + Date.now(), {cache: "no-store"}); if (!r.ok) throw 0; D = await r.json(); } catch (e) { $("#act").textContent = "Sin datos todavía"; return; }
+  if (!$("#comuna").options.length){
+    Object.keys(D.coords).sort((a, b) => a.localeCompare(b, "es")).forEach(n => $("#comuna").add(new Option(n, n)));
+    $("#comuna").value = leer("comuna") && D.coords[leer("comuna")] ? leer("comuna") : "Machalí";
+  }
+  pintar();
+}
+function pintar(){
+  $("#act").textContent = `Actualizado ${hora(D.generado)} · imagen GOES-19 de las ${hora(D.goes)}` + (D.estado && D.estado.firms === "sin clave" ? "" : "");
+  // focos
+  capas.focos.clearLayers(); capas.ind.clearLayers();
+  D.focos.forEach(f => {
+    const m = edadMin(f.t), viirs = f.fuente !== "GOES-19";
+    const mk = L.circleMarker([f.lat, f.lon], {radius: viirs ? 4 : 6, color: f.industrial ? "#555" : "#fff", weight: viirs ? 1 : 1.5,
+      fillColor: f.industrial ? "#8a94a6" : colEdad(m), fillOpacity: .95});
+    mk.bindTooltip(`${f.industrial ? "Punto caliente industrial · " : ""}${f.fuente} · ${haceTxt(m)} (${hora(f.t)})${f.frp ? " · potencia " + f.frp + " MW" : ""} · confianza ${f.conf}`);
+    (f.industrial ? capas.ind : capas.focos).addLayer(mk);
+  });
+  // incendios
+  capas.inc.clearLayers();
+  D.incendios.forEach(i => { if (i.edad_min > 1440) return;
+    L.marker([i.lat, i.lon], {opacity: 0}).bindTooltip(`🔥 ${esc(i.dist < 3 ? i.localidad : "cerca de " + i.localidad)}`, {permanent: true, direction: "top", className: "etq"}).addTo(capas.inc); });
+  // humo
+  if (humo){ humo.remove(); humo = null; }
+  if (D.humo && $("#cHumo").checked) humo = L.imageOverlay("humo.png?t=" + Date.parse(D.humo.t.replace("Z", ":00Z")), D.humo.limites, {opacity: .85}).addTo(mapa);
+  // viento
+  capas.viento.clearLayers();
+  (D.viento || []).forEach(([la, lo, dir, vel]) => {
+    const ic = L.divIcon({className: "", html: `<div class="flecha" style="transform:rotate(${(dir + 180) % 360}deg)" title="${Math.round(vel)} km/h">↑</div>`, iconSize: [16, 16]});
+    L.marker([la, lo], {icon: ic, interactive: false}).addTo(capas.viento);
+  });
+  // comuna
+  const c = $("#comuna").value, e = (D.localidades || {})[c];
+  const n = e ? e.nivel : 0;
+  $("#estado").className = "estado n" + n;
+  $("#estado").innerHTML = `<b>${["Sin incendios cerca", "Incendio en la zona", "Incendio cercano"][n]}</b><span>${esc(e ? e.texto : "")}</span>`;
+  // lista
+  const L2 = D.incendios.filter(i => i.edad_min <= 1440);
+  $("#lista").innerHTML = L2.length ? L2.map((i, k) => `<div class="inc" data-k="${k}" style="--c:${colEdad(i.edad_min)}"><div class="t"><span>${haceTxt(i.edad_min)} · ${i.focos} detecciones</span><span>${i.tendencia}</span></div><p>${esc(i.texto)}</p></div>`).join("")
+    : `<p class="vacio">No hay incendios detectados en las últimas 24 horas en la zona central.</p>`;
+}
+document.addEventListener("click", ev => { const x = ev.target.closest(".inc"); if (x){ const i = D.incendios[+x.dataset.k]; mapa.setView([i.lat, i.lon], 11); } });
+$("#comuna").addEventListener("change", () => { guardar("comuna", $("#comuna").value); const p = D.coords[$("#comuna").value]; if (p) mapa.setView(p, 10); pintar(); });
+$("#cHumo").addEventListener("change", () => D && pintar());
+$("#cViento").addEventListener("change", ev => ev.target.checked ? capas.viento.addTo(mapa) : capas.viento.remove());
+$("#cInd").addEventListener("change", ev => ev.target.checked ? capas.ind.addTo(mapa) : capas.ind.remove());
+cargar(); setInterval(cargar, 5 * 60 * 1000);
+</script>
+</body>
+</html>
