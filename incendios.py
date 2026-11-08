@@ -232,6 +232,8 @@ def agrupar(focos, ahora, V):
         (g.append(f) if g is not None else grupos.append([f]))
     out = []
     for g in grupos:
+        if all(f["conf"] == "baja" for f in g) and len(g) < 2:
+            continue                                  # una sola detección de baja confianza: no se muestra como incendio
         la = float(np.mean([f["lat"] for f in g])); lo = float(np.mean([f["lon"] for f in g]))
         n, d, az = cercana(la, lo)
         ult = max(f["t"] for f in g); pri = min(f["t"] for f in g)
