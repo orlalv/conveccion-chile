@@ -39,6 +39,13 @@ h2{font-size:14px;margin:4px 0 0;color:var(--mu);text-transform:uppercase;letter
 .aviso{font-size:12.5px;color:var(--mu);border-top:1px solid var(--bd);padding-top:10px}
 .aviso b{color:var(--tx)}
 .flecha{color:#9fd3ff;font-size:16px;line-height:16px;text-align:center;text-shadow:0 0 3px #000}
+.est{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:10px 12px;cursor:pointer}
+.est:hover{background:#16264a}.est .t{display:flex;justify-content:space-between;font-size:12.5px;color:var(--mu)}
+.est .v{display:flex;gap:14px;margin-top:4px;font-size:14px}.est .v b{font-size:16px}.est small{color:var(--mu)}
+.est .sube{color:#ff7a59}.est .baja{color:#5ac8fa}
+.est svg{display:block;margin-top:4px}
+.qm{background:var(--panel);border:1px solid var(--bd);border-left:4px solid #ff7a59;border-radius:10px;padding:10px 12px;cursor:pointer;font-size:14px}
+.qm small{color:var(--mu)}
 .etq{background:rgba(10,20,40,.9)!important;color:#fff!important;border:1px solid var(--oro)!important;font-size:12px!important}
 @media (max-width:900px){main{grid-template-columns:1fr;grid-template-rows:55vh auto}aside{border-left:0;border-top:1px solid var(--bd)}.sel{margin-left:0;width:100%}}
 </style>
@@ -56,19 +63,27 @@ h2{font-size:14px;margin:4px 0 0;color:var(--mu);text-transform:uppercase;letter
   <div class="cap">
    <label><input type="checkbox" id="cHumo" checked> Humo</label>
    <label><input type="checkbox" id="cViento" checked> Viento</label>
+   <label><input type="checkbox" id="cQuem" checked> Áreas quemadas</label>
+   <label><input type="checkbox" id="cEst" checked> Estaciones</label>
    <label><input type="checkbox" id="cInd"> Puntos industriales</label>
   </div>
   <h2>Incendios detectados (últimas 24 h)</h2>
   <div id="lista"></div>
+  <h2>Estaciones meteorológicas cerca de incendios</h2>
+  <div id="estac"></div>
+  <h2>Áreas quemadas de la temporada</h2>
+  <div id="quem"></div>
   <div class="ley">
    <span><i style="background:var(--rojo)"></i>Fuego detectado hace menos de 1 hora</span>
    <span><i style="background:var(--nar)"></i>Hace 1 a 6 horas</span>
    <span><i style="background:var(--ama)"></i>Hace 6 a 24 horas</span>
    <span><i style="background:#8a94a6"></i>Punto caliente industrial (no es incendio)</span>
    <span><i style="background:rgba(205,190,160,.8);border-radius:2px"></i>Humo (solo de día)</span>
+   <span><i style="background:rgba(150,40,20,.6);border:1px solid #ff7a59;border-radius:2px"></i>Área quemada (Sentinel-2)</span>
+   <span><i style="background:#2d9cdb;border:2px solid #fff;border-radius:2px"></i>Estación meteorológica automática (DMC)</span>
   </div>
   <div class="aviso"><b>Información de apoyo, no oficial.</b> El satélite detecta incendios cuando ya tienen cierto tamaño y no ve bajo las nubes: no reemplaza los avisos de CONAF ni de SENAPRED.
-   <br><b>Emergencias: CONAF 130 · Bomberos 132.</b><br>Fuentes: NOAA GOES-19 (focos y humo, cada 10 min) · NASA FIRMS (VIIRS/MODIS) · viento de Open-Meteo. Iniciativa sin fines de lucro de <a href="https://metotec.cl" style="color:var(--oro)">METOTEC</a>.</div>
+   <br><b>Emergencias: CONAF 130 · Bomberos 132.</b><br>Fuentes: NOAA GOES-19 (focos y humo, cada 10 min) · NASA FIRMS (VIIRS/MODIS) · Copernicus Sentinel-2 (áreas quemadas) · estaciones automáticas de la Dirección Meteorológica de Chile · viento de Open-Meteo. Iniciativa sin fines de lucro de <a href="https://metotec.cl" style="color:var(--oro)">METOTEC</a>.</div>
  </aside>
 </main>
 <script>
@@ -77,7 +92,9 @@ const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&
 const mapa = L.map("mapa", {zoomControl: true}).setView([-34.35, -71.0], 8);
 L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, attribution: "Imagen © Esri"}).addTo(mapa);
 L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, pane: "overlayPane", opacity: .9}).addTo(mapa);
-const capas = {focos: L.layerGroup().addTo(mapa), ind: L.layerGroup(), viento: L.layerGroup().addTo(mapa), inc: L.layerGroup().addTo(mapa)};
+const capas = {focos: L.layerGroup().addTo(mapa), ind: L.layerGroup(), viento: L.layerGroup().addTo(mapa), inc: L.layerGroup().addTo(mapa), est: L.layerGroup().addTo(mapa), quem: L.layerGroup().addTo(mapa)};
+let EST = null, QM = null;
+const API_EST = "https://metotec.cl/api/estaciones_incendio";
 let humo = null, D = null;
 const leer = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
@@ -85,7 +102,47 @@ const edadMin = t => (Date.now() - Date.parse(t.replace("Z", ":00Z"))) / 60000;
 const colEdad = m => m < 60 ? "#ff4d3d" : m < 360 ? "#ff9f1c" : "#ffd23f";
 const hora = t => new Date(Date.parse(t.replace("Z", ":00Z"))).toLocaleTimeString("es-CL", {hour: "2-digit", minute: "2-digit"});
 const haceTxt = m => m < 60 ? `hace ${Math.round(m)} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : "ayer";
+async function cargarExtra(){
+  try { const r = await fetch(API_EST, {cache: "no-store"}); EST = r.ok ? await r.json() : null; } catch (e) { EST = null; }
+  try { const r = await fetch("quemadas.geojson?t=" + Date.now(), {cache: "no-store"}); QM = r.ok ? await r.json() : null; } catch (e) { QM = null; }
+  if (D) pintarExtra();
+}
+const DIRS = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
+function mini(vals, col){
+  const v = vals.filter(x => x != null); if (v.length < 2) return "";
+  const lo = Math.min(...v), hi = Math.max(...v), W = 120, H = 26, n = vals.length;
+  const pts = vals.map((x, i) => x == null ? null : `${(i * (W - 4) / (n - 1) + 2).toFixed(1)},${(H - 3 - (hi > lo ? (x - lo) / (hi - lo) : .5) * (H - 6)).toFixed(1)}`).filter(Boolean).join(" ");
+  return `<svg width="${W}" height="${H}"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.8"/></svg>`;
+}
+function pintarExtra(){
+  capas.est.clearLayers(); capas.quem.clearLayers();
+  const E = (EST && EST.estaciones) || [];
+  E.forEach(e => {
+    const ic = L.divIcon({className: "", html: `<div style="width:12px;height:12px;background:#2d9cdb;border:2px solid #fff;border-radius:2px;box-shadow:0 0 0 1px #000"></div>`, iconSize: [12, 12]});
+    L.marker([e.lat, e.lon], {icon: ic}).bindTooltip(`${esc(e.nombre)} · incendio a ${e.dist} km`).addTo(capas.est);
+  });
+  $("#estac").innerHTML = E.length ? E.sort((a, b) => a.dist - b.dist).map((e, k) => {
+    const S = e.serie || [], u = S[S.length - 1] || [], p = S[S.length - 2] || [];
+    const d = (i, dec = 1) => u[i] != null && p[i] != null ? +(u[i] - p[i]).toFixed(dec) : null;
+    const dT = d(1), dH = d(2, 0);
+    const fl = (x, u2, inv) => x == null ? "" : `<small class="${(inv ? -x : x) > 0 ? "sube" : "baja"}">${x > 0 ? "+" : ""}${x} ${u2} en 1 h</small>`;
+    const alerta = (dT != null && dT >= 3) || (dH != null && dH <= -15);
+    return `<div class="est" data-e="${k}"><div class="t"><span>Incendio a <b style="color:var(--tx)">${e.dist} km</b> al ${e.rumbo}${e.a_sotavento ? " · <b style=\"color:#ff9f1c\">el humo va hacia la estación</b>" : ""}</span></div>
+      <b>${esc(e.nombre)}</b>
+      <div class="v"><span><b>${u[1] ?? "—"}</b> °C ${fl(dT, "°C")}</span><span><b>${u[2] ?? "—"}</b> % ${fl(dH, "%", true)}</span><span>${u[4] != null ? DIRS[Math.round(u[4] / 45) % 8] : ""} <b>${u[3] ?? "—"}</b> kt</span></div>
+      <div style="display:flex;gap:10px">${mini(S.map(x => x[1]), "#ff7a59")}${mini(S.map(x => x[2]), "#5ac8fa")}</div>
+      ${alerta ? `<small style="color:#ff9f1c">Cambio brusco en la última hora: puede ser efecto del incendio.</small>` : ""}</div>`; }).join("")
+    : `<p class="vacio">Ninguna estación automática a menos de 30 km de un incendio de las últimas 6 horas.</p>`;
+  const F = (QM && QM.features) || [];
+  F.forEach(f => L.geoJSON(f, {style: {color: "#ff7a59", weight: 1.5, fillColor: "#962814", fillOpacity: .55}})
+    .bindTooltip(`Área quemada · ${f.properties.hectareas} ha · cerca de ${esc(f.properties.localidad)} · Sentinel-2 ${f.properties.imagen_antes} → ${f.properties.imagen_despues}`).addTo(capas.quem));
+  $("#quem").innerHTML = F.length ? [...F].sort((a, b) => b.properties.ultima.localeCompare(a.properties.ultima)).map((f, k) => { const p = f.properties, sv = p.severidad || {};
+    return `<div class="qm" data-q="${F.indexOf(f)}"><b>${p.hectareas.toLocaleString("es-CL")} ha</b> · cerca de ${esc(p.localidad)}<br><small>Incendio del ${p.primera.slice(8, 10)}/${p.primera.slice(5, 7)} · severidad alta ${sv.alta ?? 0} ha · imágenes del ${p.imagen_antes} y ${p.imagen_despues}</small></div>`; }).join("")
+    : `<p class="vacio">Aún no hay áreas quemadas calculadas. Se calculan con imágenes Sentinel-2 cuando un incendio lleva al menos un día sin detecciones y hay una imagen sin nubes.</p>`;
+  if (!$("#cEst").checked) capas.est.remove(); if (!$("#cQuem").checked) capas.quem.remove();
+}
 async function cargar(){
+  cargarExtra();
   try { const r = await fetch("data.json?t=" + Date.now(), {cache: "no-store"}); if (!r.ok) throw 0; D = await r.json(); } catch (e) { $("#act").textContent = "Sin datos todavía"; return; }
   if (!$("#comuna").options.length){
     Object.keys(D.coords).sort((a, b) => a.localeCompare(b, "es")).forEach(n => $("#comuna").add(new Option(n, n)));
@@ -131,6 +188,10 @@ document.addEventListener("click", ev => { const x = ev.target.closest(".inc"); 
 $("#comuna").addEventListener("change", () => { guardar("comuna", $("#comuna").value); const p = D.coords[$("#comuna").value]; if (p) mapa.setView(p, 10); pintar(); });
 $("#cHumo").addEventListener("change", () => D && pintar());
 $("#cViento").addEventListener("change", ev => ev.target.checked ? capas.viento.addTo(mapa) : capas.viento.remove());
+$("#cEst").addEventListener("change", ev => ev.target.checked ? capas.est.addTo(mapa) : capas.est.remove());
+$("#cQuem").addEventListener("change", ev => ev.target.checked ? capas.quem.addTo(mapa) : capas.quem.remove());
+document.addEventListener("click", ev => { const e = ev.target.closest(".est"); if (e && EST){ const x = EST.estaciones[+e.dataset.e]; mapa.setView([x.lat, x.lon], 11); }
+  const q = ev.target.closest(".qm"); if (q && QM){ mapa.fitBounds(L.geoJSON(QM.features[+q.dataset.q]).getBounds(), {maxZoom: 13}); } });
 $("#cInd").addEventListener("change", ev => ev.target.checked ? capas.ind.addTo(mapa) : capas.ind.remove());
 cargar(); setInterval(cargar, 5 * 60 * 1000);
 </script>

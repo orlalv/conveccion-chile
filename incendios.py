@@ -376,9 +376,16 @@ def actualizar(t, salida_site, sitio_url, Geo, archivos, bajar, prev=None):
 
     V = viento() or prev.get("viento", [])
     inc = agrupar(todos, ahora, V)
+    temporada = prev.get("temporada", [])
+    try:                                           # etapa 2: registro de la temporada y áreas quemadas (Sentinel-2)
+        import quemadas as Q
+        temporada = Q.registrar(temporada, todos, inc, ahora)
+        Q.actualizar(temporada, dir_inc, sitio_url, ahora)
+    except Exception as ex:
+        print("  incendios: áreas quemadas falló:", ex)
     js = dict(generado=ahora.strftime("%Y-%m-%dT%H:%MZ"), goes=t.strftime("%Y-%m-%dT%H:%MZ"), zona=[[LAT_S, LON_O], [LAT_N, LON_E]],
               estado=estado, focos=todos, incendios=inc, humo=humo, viento=V, localidades=estado_localidades(inc),
-              coords={n: [a, b] for n, a, b in LOCALIDADES}, industriales=INDUSTRIALES, historial=hist)
+              coords={n: [a, b] for n, a, b in LOCALIDADES}, industriales=INDUSTRIALES, historial=hist, temporada=temporada)
     json.dump(js, open(os.path.join(dir_inc, "data.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     print(f"  incendios: {len(inc)} incendios activos/recientes, {sum(f['industrial'] for f in todos)} puntos industriales descartados")
     return js
@@ -391,10 +398,11 @@ def mantener(salida_site, sitio_url):
     prev = cargar_previo(dir_inc, sitio_url)
     if prev:
         json.dump(prev, open(os.path.join(dir_inc, "data.json"), "w"), ensure_ascii=False, separators=(",", ":"))
-        if prev.get("humo") and sitio_url and not os.path.exists(os.path.join(dir_inc, "humo.png")):
-            try:
-                r = requests.get(sitio_url.rstrip("/") + "/incendios/humo.png", timeout=30)
-                if r.ok:
-                    open(os.path.join(dir_inc, "humo.png"), "wb").write(r.content)
-            except Exception:
-                pass
+        for nombre in ("humo.png", "quemadas.geojson"):
+            if sitio_url and not os.path.exists(os.path.join(dir_inc, nombre)):
+                try:
+                    r = requests.get(sitio_url.rstrip("/") + "/incendios/" + nombre, timeout=30)
+                    if r.ok:
+                        open(os.path.join(dir_inc, nombre), "wb").write(r.content)
+                except Exception:
+                    pass

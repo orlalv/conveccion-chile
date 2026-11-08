@@ -5,3 +5,4 @@ shapely>=2.0
 netCDF4>=1.6
 pillow>=10.0
 requests>=2.31
+rasterio>=1.3

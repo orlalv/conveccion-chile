@@ -5,3 +5,4 @@ __pycache__/
 analisis/
 site/incendios/data.json
 site/incendios/humo.png
+site/incendios/quemadas.geojson
