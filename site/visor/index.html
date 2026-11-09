@@ -119,7 +119,9 @@ mapa.createPane("sat"); mapa.getPane("sat").style.zIndex = 250;
 mapa.createPane("ref"); mapa.getPane("ref").style.zIndex = 450; mapa.getPane("ref").style.pointerEvents = "none";
 L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {pane: "ref", maxZoom: 12, opacity: .8, attribution: "Límites © Esri"}).addTo(mapa);
 const PLANT = []; ["best", "nrt", "all"].forEach(ep => [7, 8, 6, 9].forEach(n => ["png", "jpg"].forEach(f => PLANT.push([`GoogleMapsCompatible_Level${n}`, f, ep]))));
-const conf = {}, cache = {};
+const conf = {"GOES-East_ABI_GeoColor": ["GoogleMapsCompatible_Level7", "png", "best"], "GOES-East_ABI_Band2_Red_Visible_1km": ["GoogleMapsCompatible_Level7", "png", "best"],
+  "GOES-East_ABI_Band13_Clean_Infrared": ["GoogleMapsCompatible_Level6", "png", "best"], "GOES-East_ABI_FireTemp": ["GoogleMapsCompatible_Level7", "png", "best"],
+  "GOES-East_ABI_Dust": ["GoogleMapsCompatible_Level7", "png", "best"], "GOES-East_ABI_Air_Mass": ["GoogleMapsCompatible_Level6", "png", "best"]}, cache = {};   // verificado en NASA GIBS (nov 2026)
 let FR = [], iFr = 0, anim = null;
 const PASO = {3: 10, 12: 20, 24: 30};
 const iso = d => d.toISOString().slice(0, 19) + "Z";

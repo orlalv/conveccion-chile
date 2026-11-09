@@ -68,7 +68,7 @@ h2{font-size:12.5px;margin:6px 0 0;color:var(--mu);text-transform:uppercase;lett
     <button id="play" title="Animar">▶</button>
     <select id="rango" title="Período"><option value="3">Últimas 3 horas</option><option value="12">Últimas 12 horas</option><option value="24" selected>Últimas 24 horas</option><option value="72">Últimas 72 horas</option></select>
     <span class="hora" id="hframe">—</span>
-    <select id="fondo" title="Imagen de fondo"><option value="geo">Satélite · color real (humo)</option><option value="b7">Satélite · fuego (banda 7, 6 h)</option><option value="ir">Satélite · infrarrojo (banda 13)</option><option value="esri">Mapa base</option></select>
+    <select id="fondo" title="Imagen de fondo"><option value="geo">Satélite · color real (humo)</option><option value="fuego">Satélite · fuego (RGB temperatura del fuego)</option><option value="b7">Satélite · banda 7 propia (6 h)</option><option value="ir">Satélite · infrarrojo (banda 13)</option><option value="esri">Mapa base</option></select>
    </div>
    <input type="range" id="paso" min="0" max="1" value="1">
    <div class="marcas" id="marcas" title="Momentos con fuego detectado"></div>
@@ -122,9 +122,11 @@ const capas = {focos: L.layerGroup().addTo(mapa), contornos: L.layerGroup().addT
 let D = null, QM = null, humo = null;
 
 /* ---------- línea de tiempo e imágenes ---------- */
-const GIBS = {geo: "GOES-East_ABI_GeoColor", ir: "GOES-East_ABI_Band13_Clean_Infrared"};
+const GIBS = {geo: "GOES-East_ABI_GeoColor", ir: "GOES-East_ABI_Band13_Clean_Infrared", fuego: "GOES-East_ABI_FireTemp"};
 const PLANT = []; ["best", "nrt", "all"].forEach(ep => [7, 8, 6].forEach(n => ["png", "jpg"].forEach(f => PLANT.push([`GoogleMapsCompatible_Level${n}`, f, ep]))));
-const conf = {}, cache = {};
+const conf = {"GOES-East_ABI_GeoColor": ["GoogleMapsCompatible_Level7", "png", "best"], "GOES-East_ABI_Band2_Red_Visible_1km": ["GoogleMapsCompatible_Level7", "png", "best"],
+  "GOES-East_ABI_Band13_Clean_Infrared": ["GoogleMapsCompatible_Level6", "png", "best"], "GOES-East_ABI_FireTemp": ["GoogleMapsCompatible_Level7", "png", "best"],
+  "GOES-East_ABI_Dust": ["GoogleMapsCompatible_Level7", "png", "best"], "GOES-East_ABI_Air_Mass": ["GoogleMapsCompatible_Level6", "png", "best"]}, cache = {};   // verificado en NASA GIBS (nov 2026)
 let FR = [], iFr = 0, anim = null, fondo = "geo", visible = null;
 const PASO = {3: 10, 12: 20, 24: 30, 72: 60};
 const iso = d => d.toISOString().slice(0, 19) + "Z";
@@ -134,6 +136,7 @@ function cuadros(){
   return Array.from({length: n + 1}, (_, i) => new Date(fin - (n - i) * p));
 }
 function probar(capa){
+  if (conf[GIBS[capa]]) conf[capa] = conf[GIBS[capa]];
   if (conf[capa] !== undefined) return Promise.resolve(conf[capa]);
   const d = new Date(Math.floor((Date.now() - 90 * 60000) / 600000) * 600000);
   return new Promise(res => { let k = 0;
@@ -180,7 +183,7 @@ function verFrame(i){
   iFr = Math.max(0, Math.min(i, FR.length - 1)); $("#paso").value = iFr;
   const ultimo = iFr === FR.length - 1;
   $("#hframe").textContent = FR[iFr] ? fechaHora(FR[iFr]) + (ultimo ? " · última" : "") : "—";
-  const hay = fondo === "geo" || fondo === "ir" || (fondo === "b7" && D && D.b7 && D.b7.length);
+  const hay = fondo === "geo" || fondo === "ir" || fondo === "fuego" || (fondo === "b7" && D && D.b7 && D.b7.length);
   if (hay){
     const l = capaDe(iFr);
     if (!mapa.hasLayer(l)) l.addTo(mapa);
