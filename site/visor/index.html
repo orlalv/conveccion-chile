@@ -57,7 +57,7 @@ aside{border-left:1px solid var(--bd);overflow:auto;padding:14px;display:flex;fl
  <div id="mapwrap"><div id="mapa"></div>
   <div class="pista" id="pista">Haga clic en el mapa: le digo qué está viendo</div>
   <div class="tl">
-   <button id="play" title="Animar">▶</button>
+   <button id="atras" title="Imagen anterior">◀</button><button id="play" title="Animar">▶▶</button><button id="adelante" title="Imagen siguiente">▶︎</button>
    <select id="rango"><option value="3" selected>Últimas 3 horas</option><option value="12">Últimas 12 horas</option><option value="24">Últimas 24 horas</option></select>
    <span class="hora" id="hframe">—</span>
    <input type="range" id="paso" min="0" max="1" value="1">
@@ -66,6 +66,7 @@ aside{border-left:1px solid var(--bd);overflow:auto;padding:14px;display:flex;fl
  <aside>
   <div class="caja" id="que"><h3>¿Qué estoy viendo?</h3><p class="mu">Haga clic en cualquier punto del mapa y aquí aparece qué es, según el color de la imagen.</p></div>
   <div class="caja" id="info"></div>
+  <p class="mu"><b>Resolución:</b> el satélite está a 36.000 km; cada píxel mide ~2 km en las bandas infrarrojas y ~1 km en la visible. Al acercarse mucho la imagen se ve borrosa porque se están agrandando esos píxeles: para detalle de calles o cerros no alcanza.</p>
   <p class="mu">Imágenes del satélite GOES-19 (NOAA) publicadas por NASA GIBS, con ~40 minutos de atraso. La interpretación por color es una ayuda para aprender a leer la imagen, no un análisis oficial. Iniciativa sin fines de lucro de <a href="https://metotec.cl" style="color:var(--oro)">METOTEC</a>.</p>
  </aside>
 </main>
@@ -179,7 +180,7 @@ function ver(i){
   if (l.isLoading && l.isLoading && l.isLoading()){ l.once("load", mostrar); setTimeout(mostrar, 1500); } else mostrar();
   if (i + 1 < FR.length){ const s = capaDe(i + 1); if (!mapa.hasLayer(s)) s.addTo(mapa); }
 }
-function pararAnim(){ if (anim){ clearInterval(anim); anim = null; $("#play").textContent = "▶"; } }
+function pararAnim(){ if (anim){ clearInterval(anim); anim = null; $("#play").textContent = "▶▶"; } }
 $("#play").addEventListener("click", () => { if (anim) return pararAnim(); $("#play").textContent = "❚❚"; if (iFr >= FR.length - 1) ver(0);
   anim = setInterval(() => { if (iFr >= FR.length - 1) return pararAnim(); ver(iFr + 1); }, 600); });
 $("#paso").addEventListener("input", ev => { pararAnim(); ver(+ev.target.value); });
@@ -228,6 +229,10 @@ mapa.on("click", async ev => {
 });
 armar();
 setInterval(() => { if (!anim && iFr === FR.length - 1) armar(); }, 10 * 60000);
+$("#atras").addEventListener("click", () => { pararAnim(); if (iFr > 0) ver(iFr - 1); });
+$("#adelante").addEventListener("click", () => { pararAnim(); if (iFr < FR.length - 1) ver(iFr + 1); });
+document.addEventListener("keydown", ev => { if (ev.target.tagName === "INPUT" || ev.target.tagName === "SELECT") return;
+  if (ev.key === "ArrowLeft"){ pararAnim(); if (iFr > 0) ver(iFr - 1); } if (ev.key === "ArrowRight"){ pararAnim(); if (iFr < FR.length - 1) ver(iFr + 1); } });
 </script>
 </body>
 </html>
