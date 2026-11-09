@@ -16,4 +16,12 @@ jobs:
               case "$c" in 200*image*) echo "OK $capa $ep L$n $f -> $c | $(grep -i access-control-allow-origin /tmp/h | tr -d '\r')";; esac
             done; done; done
           done
+          D=$(date -u -d '-1 day' +%Y-%m-%d)
+          for capa in VIIRS_NOAA20_CorrectedReflectance_TrueColor VIIRS_NOAA21_CorrectedReflectance_TrueColor VIIRS_SNPP_CorrectedReflectance_TrueColor MODIS_Terra_CorrectedReflectance_TrueColor MODIS_Aqua_CorrectedReflectance_TrueColor; do
+            for n in 9 8; do for f in jpg png; do
+              u="https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/$capa/default/$D/GoogleMapsCompatible_Level$n/7/78/38.$f"
+              c=$(curl -s -o /tmp/t -w "%{http_code} %{content_type} %{size_download}" "$u")
+              case "$c" in 200*image*) echo "OK $capa L$n $f -> $c";; esac
+            done; done
+          done
           echo listo
