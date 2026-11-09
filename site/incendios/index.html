@@ -131,7 +131,7 @@ let FR = [], iFr = 0, anim = null, fondo = "geo", visible = null;
 const PASO = {3: 10, 12: 20, 24: 30, 72: 60};
 const iso = d => d.toISOString().slice(0, 19) + "Z";
 
-/* GIBS publica las imágenes GOES con 40 a 90 min de atraso: se busca la más reciente que ya exista */
+/* GIBS publica las imágenes GOES con 40 a 90 min de atraso y por partes: se busca la más reciente que ya exista y se usa la anterior, que ya está completa */
 const ULT = {};
 function ultimaDisponible(capa, c){
   if (ULT[capa]) return Promise.resolve(ULT[capa]);
@@ -139,13 +139,13 @@ function ultimaDisponible(capa, c){
   return new Promise(res => { let k = 0;
     const sig = () => { if (k > 15){ ULT[capa] = new Date(base - 120 * 60000); return res(ULT[capa]); }
       const d = new Date(base - k++ * 600000), im = new Image();
-      im.onload = () => { ULT[capa] = d; setTimeout(() => delete ULT[capa], 9 * 60000); res(d); }; im.onerror = sig;
+      im.onload = () => { ULT[capa] = new Date(d - 600000); setTimeout(() => delete ULT[capa], 9 * 60000); res(ULT[capa]); }; im.onerror = sig;
       im.src = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${capa}/default/${d.toISOString().slice(0, 19)}Z/${c[0]}/4/9/4.${c[1]}`; };
     sig(); });
 }
 let FIN = null;
 function cuadros(){
-  if (fondo === "hd"){ const n = Math.max(1, Math.ceil(+$("#rango").value / 24)), hoy = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()); return Array.from({length: n + 1}, (_, i) => new Date(hoy - (n - i) * 864e5)); }
+  if (fondo === "hd"){ const n = Math.max(1, Math.ceil(+$("#rango").value / 24)), hoy = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()) - (new Date().getUTCHours() >= 19 ? 0 : 864e5); return Array.from({length: n + 1}, (_, i) => new Date(hoy - (n - i) * 864e5)); }
   if (fondo === "b7") return (D && D.b7 || []).map(ts => new Date(Date.UTC(+ts.slice(0, 4), +ts.slice(4, 6) - 1, +ts.slice(6, 8), +ts.slice(8, 10), +ts.slice(10, 12))));
   const h = +$("#rango").value, p = PASO[h] * 60000, n = Math.round(h * 60 / PASO[h]);
   const fin = FIN ? Math.floor(FIN.getTime() / 600000) * 600000 : Math.floor((Date.now() - 60 * 60000) / p) * p;
@@ -194,7 +194,7 @@ async function armarFondo(){
   FR = cuadros();
   if (!FR.length){ fondo = fondo === "b7" ? "b7" : fondo; FR = [new Date()]; }
   $("#paso").max = Math.max(0, FR.length - 1);
-  marcas(); verFrame(fondo === "hd" && FR.length > 1 && new Date().getUTCHours() < 20 ? FR.length - 2 : FR.length - 1);
+  marcas(); verFrame(FR.length - 1);
 }
 function verFrame(i){
   iFr = Math.max(0, Math.min(i, FR.length - 1)); $("#paso").value = iFr;
