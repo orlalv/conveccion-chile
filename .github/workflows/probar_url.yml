@@ -1,0 +1,12 @@
+name: Probar URL
+on:
+  workflow_dispatch:
+    inputs:
+      url: {description: "URL", required: true}
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -s -D - -o r.txt "${{ inputs.url }}"; echo; head -c 1500 r.txt; echo; python3 -c "
+          import json;d=json.load(open('r.txt'));print('filas',len(d.get('filas',[])),'faltan',d.get('faltan'))" || true
