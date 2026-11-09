@@ -1,0 +1,25 @@
+name: Muestras GIBS
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  muestras:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bajar teselas de ejemplo
+        run: |
+          mkdir m && cd m
+          bajar(){ # capa nivel tiempo nombre
+            for xy in "5/18/9" "5/19/9" "5/20/9" "5/18/10" "5/19/10"; do
+              z=${xy%%/*}; r=${xy#*/}; y=${r%%/*}; x=${r#*/}
+              curl -sf "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/$1/default/$3/GoogleMapsCompatible_Level$2/$z/$y/$x.png" -o "$4_${y}_${x}.png" || true
+            done; }
+          DIA=2026-11-08T17:00:00Z; NOCHE=2026-11-08T07:00:00Z
+          bajar GOES-East_ABI_GeoColor 7 $DIA geo_dia; bajar GOES-East_ABI_GeoColor 7 $NOCHE geo_noche
+          bajar GOES-East_ABI_Band2_Red_Visible_1km 7 $DIA vis
+          bajar GOES-East_ABI_Band13_Clean_Infrared 6 $DIA ir
+          bajar GOES-East_ABI_FireTemp 7 $DIA fuego_dia; bajar GOES-East_ABI_FireTemp 7 $NOCHE fuego_noche
+          bajar GOES-East_ABI_Dust 7 $DIA polvo; bajar GOES-East_ABI_Air_Mass 6 $DIA aire
+          ls -la
+          git init -q -b muestras && git add . && git -c user.name=bot -c user.email=bot@metotec.cl commit -qm muestras
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" muestras
