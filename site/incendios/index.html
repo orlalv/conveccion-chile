@@ -68,7 +68,7 @@ h2{font-size:12.5px;margin:6px 0 0;color:var(--mu);text-transform:uppercase;lett
     <button id="atras" title="Imagen anterior">◀</button><button id="play" title="Animar">Animar</button><button id="adelante" title="Imagen siguiente">▶︎</button><button id="limpio" title="Ocultar focos, humo y nombres para ver la imagen tal cual">Solo imagen</button>
     <select id="rango" title="Período"><option value="3">Últimas 3 horas</option><option value="12">Últimas 12 horas</option><option value="24" selected>Últimas 24 horas</option><option value="72">Últimas 72 horas</option></select>
     <span class="hora" id="hframe">—</span>
-    <select id="fondo" title="Imagen de fondo"><option value="geo">Satélite · color real (humo)</option><option value="fuego">Satélite · fuego (RGB temperatura del fuego)</option><option value="b7">Satélite · banda 7 propia (6 h)</option><option value="ir">Satélite · infrarrojo (banda 13)</option><option value="hd">Alta resolución del día (VIIRS, 375 m)</option><option value="esri">Mapa base</option></select>
+    <select id="fondo" title="Imagen de fondo"><option value="vivo">Satélite · color real casi en vivo (6 h)</option><option value="geo">Satélite · color real NASA (hasta 72 h, 1 h de atraso)</option><option value="fuego">Satélite · fuego (RGB temperatura del fuego)</option><option value="b7">Satélite · banda 7 propia (6 h)</option><option value="ir">Satélite · infrarrojo (banda 13)</option><option value="hd">Alta resolución del día (VIIRS, 375 m)</option><option value="esri">Mapa base</option></select>
    </div>
    <input type="range" id="paso" min="0" max="1" value="1">
    <div class="marcas" id="marcas" title="Momentos con fuego detectado"></div>
@@ -79,7 +79,7 @@ h2{font-size:12.5px;margin:6px 0 0;color:var(--mu);text-transform:uppercase;lett
   <div class="estado" id="estado"><b>—</b><span>Cargando…</span></div>
   <div class="cap">
    <label><input type="checkbox" id="cFocos" checked> Focos</label>
-   <label><input type="checkbox" id="cHumo" checked> Humo</label>
+   <label><input type="checkbox" id="cHumo"> Humo</label>
    <label><input type="checkbox" id="cViento"> Viento</label>
    <label><input type="checkbox" id="cQuem" checked> Áreas quemadas</label>
    <label><input type="checkbox" id="cChicos"> Focos pequeños</label>
@@ -90,14 +90,14 @@ h2{font-size:12.5px;margin:6px 0 0;color:var(--mu);text-transform:uppercase;lett
   <h2>Áreas quemadas de la temporada</h2>
   <div id="quem"></div>
   <div class="ley">
-   <span><i style="background:var(--rojo)"></i>Fuego activo (detectado en la última hora del cuadro)</span>
-   <span><i style="background:var(--nar)"></i>Ardió hace 1 a 6 horas</span>
-   <span><i style="background:var(--osc)"></i>Ardió hace más de 6 horas</span>
+   <span><i style="background:transparent;border:2px solid var(--rojo)"></i>Fuego activo (detectado en la última hora del cuadro)</span>
+   <span><i style="background:transparent;border:2px solid var(--nar)"></i>Ardió hace 1 a 6 horas</span>
+   <span><i style="background:transparent;border:2px solid var(--osc)"></i>Ardió hace más de 6 horas</span>
    <span><i style="background:transparent;border:2px dashed #ffd23f"></i>Zona afectada por el incendio (contorno de los focos)</span>
-   <span><i style="background:rgba(150,40,20,.6);border:1px solid #ff7a59"></i>Área quemada medida con Sentinel-2</span>
-   <span><i style="background:rgba(205,190,160,.8)"></i>Humo (última imagen de día)</span>
+   <span><i style="background:transparent;border:2px dashed #ff7a59"></i>Área quemada medida con Sentinel-2</span>
+   <span><i style="background:rgba(205,190,160,.8)"></i>Humo detectado por NOAA (opcional; en color real el humo se ve directo)</span>
   </div>
-  <div class="aviso">Cada foco se dibuja con el tamaño del píxel que lo detectó: 375 m (VIIRS), 1 km (MODIS) o ~2,5 km (GOES-19, que avisa antes pero con menos detalle).
+  <div class="aviso">Los focos y áreas se dibujan solo con su borde para que debajo se vea la imagen real; «Solo imagen» los oculta todos. Cada foco se dibuja con el tamaño del píxel que lo detectó: 375 m (VIIRS), 1 km (MODIS) o ~2,5 km (GOES-19, que avisa antes pero con menos detalle).
    <br><br><b>Información de apoyo, no oficial.</b> El satélite detecta incendios cuando ya tienen cierto tamaño y no ve bajo las nubes; no reemplaza los avisos de CONAF ni de SENAPRED. <b>Emergencias: CONAF 130 · Bomberos 132.</b>
    <br>Fuentes: NOAA GOES-19 · NASA FIRMS (VIIRS/MODIS) y GIBS · Copernicus Sentinel-2 · viento de Open-Meteo. Iniciativa sin fines de lucro de <a href="https://metotec.cl" style="color:var(--oro)">METOTEC</a>.</div>
  </aside>
@@ -127,7 +127,8 @@ const PLANT = []; ["best", "nrt", "all"].forEach(ep => [7, 8, 6].forEach(n => ["
 const conf = {"VIIRS_NOAA20_CorrectedReflectance_TrueColor": ["GoogleMapsCompatible_Level9", "jpg", "best"], "GOES-East_ABI_GeoColor": ["GoogleMapsCompatible_Level7", "png", "best"], "GOES-East_ABI_Band2_Red_Visible_1km": ["GoogleMapsCompatible_Level7", "png", "best"],
   "GOES-East_ABI_Band13_Clean_Infrared": ["GoogleMapsCompatible_Level6", "png", "best"], "GOES-East_ABI_FireTemp": ["GoogleMapsCompatible_Level7", "png", "best"],
   "GOES-East_ABI_Dust": ["GoogleMapsCompatible_Level7", "png", "best"], "GOES-East_ABI_Air_Mass": ["GoogleMapsCompatible_Level6", "png", "best"]}, cache = {};   // verificado en NASA GIBS (nov 2026)
-let FR = [], iFr = 0, anim = null, fondo = "geo", visible = null;
+let FR = [], iFr = 0, anim = null, fondo = "vivo", visible = null;
+const PROPIO = {b7: "png", vivo: "jpg"};          // cuadros propios guardados en el sitio cada 10 min (últimas 6 h)
 const PASO = {3: 10, 12: 20, 24: 30, 72: 60};
 const iso = d => d.toISOString().slice(0, 19) + "Z";
 
@@ -157,7 +158,7 @@ function respaldo(capa){
 let FIN = null;
 function cuadros(){
   if (fondo === "hd"){ const n = Math.max(1, Math.ceil(+$("#rango").value / 24)), hoy = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()) - (new Date().getUTCHours() >= 19 ? 0 : 864e5); return Array.from({length: n + 1}, (_, i) => new Date(hoy - (n - i) * 864e5)); }
-  if (fondo === "b7") return (D && D.b7 || []).map(ts => new Date(Date.UTC(+ts.slice(0, 4), +ts.slice(4, 6) - 1, +ts.slice(6, 8), +ts.slice(8, 10), +ts.slice(10, 12))));
+  if (PROPIO[fondo]) return (D && D[fondo] || []).map(ts => new Date(Date.UTC(+ts.slice(0, 4), +ts.slice(4, 6) - 1, +ts.slice(6, 8), +ts.slice(8, 10), +ts.slice(10, 12))));
   const h = +$("#rango").value, p = PASO[h] * 60000, n = Math.round(h * 60 / PASO[h]);
   const fin = FIN ? Math.floor(FIN.getTime() / 600000) * 600000 : Math.floor((Date.now() - 60 * 60000) / p) * p;
   return Array.from({length: n + 1}, (_, i) => new Date(fin - (n - i) * p));
@@ -177,7 +178,7 @@ function capaDe(i){
   const d = FR[i], k = fondo + iso(d);
   if (cache[k]) return cache[k];
   let l;
-  if (fondo === "b7") l = L.imageOverlay(`b7/${D.b7[i]}.png`, D.zona_img, {opacity: 0, pane: "satelite"});
+  if (PROPIO[fondo]) l = L.imageOverlay(`${fondo}/${D[fondo][i]}.${PROPIO[fondo]}`, D.zona_img, {opacity: 0, pane: "satelite"});
   else {
     const c = conf[fondo], mz = +c[0].match(/Level(\d+)/)[1];
     l = L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${GIBS[fondo]}/default/${fondo === "hd" ? d.toISOString().slice(0, 10) : iso(d)}/${c[0]}/{z}/{y}/{x}.${c[1]}`,
@@ -190,20 +191,24 @@ async function armarFondo(){
   Object.values(cache).forEach(l => l.remove()); Object.keys(cache).forEach(k => delete cache[k]); visible = null;
   esri.remove(); gris.remove();
   let nota = "Imágenes GOES-19 (NOAA, vía NASA GIBS) con 1 hora de atraso aprox. · los focos se acumulan hasta la hora mostrada";
+  if (fondo === "vivo" && !(D && D.vivo && D.vivo.length)){ fondo = "geo"; $("#fondo").value = "geo"; }   // aún sin cuadros propios
   if (fondo === "esri") esri.addTo(mapa);
   else if (fondo === "b7"){
     gris.addTo(mapa);
     nota = D && D.b7 && D.b7.length ? "Banda 7 (3,9 µm) del GOES-19, últimas 6 horas: el fuego aparece como puntos amarillos, rojos o blancos según su calor."
       : "Todavía no hay imágenes de banda 7 guardadas; se agrega una cada 10 minutos.";
+  } else if (fondo === "vivo"){
+    gris.addTo(mapa);
+    nota = "Color real del GOES-19 procesado por METOTEC (10 a 20 min de atraso, 0,5 km): el humo, el fuego grande y lo quemado se ven tal como son. De noche, nubes en infrarrojo.";
   } else {
     const c = await probar(fondo);
     if (!c){ esri.addTo(mapa); nota = "No se pudo cargar la imagen GOES-19 de NASA GIBS; se muestra el mapa base."; fondo = "esri"; $("#fondo").value = "esri"; }
     else if (fondo !== "hd") FIN = await ultimaDisponible(GIBS[fondo], c);
   }
   $("#nota").textContent = nota;
-  $("#rango").disabled = fondo === "b7";
+  $("#rango").disabled = !!PROPIO[fondo];
   FR = cuadros();
-  if (!FR.length){ fondo = fondo === "b7" ? "b7" : fondo; FR = [new Date()]; }
+  if (!FR.length) FR = [new Date()];
   $("#paso").max = Math.max(0, FR.length - 1);
   marcas(); verFrame(FR.length - 1);
 }
@@ -211,7 +216,7 @@ function verFrame(i){
   iFr = Math.max(0, Math.min(i, FR.length - 1)); $("#paso").value = iFr;
   const ultimo = iFr === FR.length - 1;
   $("#hframe").textContent = !FR[iFr] ? "—" : fondo === "hd" ? "Pasada del " + FR[iFr].toLocaleDateString("es-CL", {day: "2-digit", month: "2-digit", timeZone: "UTC"}) : fechaHora(FR[iFr]) + (ultimo ? " · última" : "");
-  const hay = fondo === "hd" || fondo === "geo" || fondo === "ir" || fondo === "fuego" || (fondo === "b7" && D && D.b7 && D.b7.length);
+  const hay = fondo === "hd" || fondo === "geo" || fondo === "ir" || fondo === "fuego" || (PROPIO[fondo] && D && D[fondo] && D[fondo].length);
   if (hay){
     const l = capaDe(iFr);
     if (!mapa.hasLayer(l)) l.addTo(mapa);
@@ -253,7 +258,7 @@ function relevante(f){ return D.incendios.some(i => i.relevante !== false && Mat
 function pintarFuego(){
   capas.focos.clearLayers(); capas.contornos.clearLayers(); capas.ind.clearLayers();
   const ultimo = iFr === FR.length - 1;
-  const paso = fondo === "b7" ? 10 : fondo === "hd" ? 1440 : (PASO[$("#rango").value] || 10);
+  const paso = PROPIO[fondo] ? 10 : fondo === "hd" ? 1440 : (PASO[$("#rango").value] || 10);
   const tf = ultimo || !FR.length ? Date.now() : FR[iFr].getTime() + paso * 60000;
   const t0 = FR.length > 1 ? FR[0].getTime() - 6 * 3600000 : Date.now() - 72 * 3600000;
   const chicos = $("#cChicos").checked;
@@ -262,8 +267,8 @@ function pintarFuego(){
     if (!f.industrial && !chicos && !relevante(f)) return;
     const m = (tf - ms(f.t)) / 60000, goes = f.fuente === "GOES-19";
     const col = f.industrial ? "#8a94a6" : m <= 60 ? "#ff3b1f" : m <= 360 ? "#ff8c1a" : "#c0392b";
-    const r = L.rectangle(huella(f), {stroke: goes, color: col, weight: 1, dashArray: goes ? "3 3" : null, fillColor: col,
-      fillOpacity: f.industrial ? .5 : goes ? (m <= 60 ? .35 : .18) : (m <= 60 ? .9 : .7)});
+    const r = L.rectangle(huella(f), {color: col, weight: goes ? 1 : 1.5, dashArray: goes ? "3 3" : null, fillColor: col,   // solo borde: deja ver la imagen real
+      fillOpacity: f.industrial ? .3 : m <= 60 && !goes ? .25 : 0});
     r.bindTooltip(`${f.industrial ? "Punto caliente industrial (no es incendio) · " : ""}${f.fuente} · ${haceTxt((Date.now() - ms(f.t)) / 60000)} (${hora(f.t)})${f.frp ? " · potencia " + f.frp + " MW" : ""}`);
     (f.industrial ? capas.ind : capas.focos).addLayer(r);
   });
@@ -304,7 +309,7 @@ function pintarPanel(){
     + (nCh && !chicos ? `<p class="vacio">Hay ${nCh} focos pequeños (quemas agrícolas u otros fuegos menores) ocultos; se ven con «Focos pequeños».</p>` : "");
   capas.quem.clearLayers();
   const F = (QM && QM.features) || [];
-  F.forEach(f => L.geoJSON(f, {style: {color: "#ff7a59", weight: 1.5, fillColor: "#962814", fillOpacity: .5}})
+  F.forEach(f => L.geoJSON(f, {style: {color: "#ff7a59", weight: 1.5, dashArray: "5 3", fillOpacity: 0}})
     .bindTooltip(`Área quemada · ${f.properties.hectareas} ha · cerca de ${esc(f.properties.localidad)} · Sentinel-2 ${f.properties.imagen_antes} → ${f.properties.imagen_despues}`).addTo(capas.quem));
   if (!$("#cQuem").checked) capas.quem.remove();
   $("#quem").innerHTML = F.length ? F.map((f, k) => { const p = f.properties, sv = p.severidad || {};

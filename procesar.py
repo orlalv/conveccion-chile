@@ -680,6 +680,7 @@ def main():
             print("  aviso: resumen satelital falló:", ex)
         SE.guardar(a.salida, sat)
         try:                                   # incendios y humo (zona central): no detiene el visor si falla
+            IN.ULTIMO_C13 = c13
             IN.actualizar(t, os.path.dirname(a.salida.rstrip("/")), a.sitio_url, Geo, archivos, bajar)
         except Exception as ex:
             print("  aviso: incendios falló:", ex)

@@ -22,6 +22,7 @@ from PIL import Image
 LAT_S, LAT_N, LON_O, LON_E = -38.0, -32.0, -74.0, -69.8
 HORAS = 72                      # focos que se guardan (la página anima hasta 72 h)
 B7_CUADROS = 36
+ULTIMO_C13 = None                # banda 13 de la imagen actual (la deja procesar.py) para el color real propio
 ULTIMO_C07 = None                 # imágenes de banda 7 que se guardan (6 h)
 DIAS_PERSIST = 7                # historial para detectar puntos industriales
 CODIGOS = {10: "alta", 11: "alta", 30: "alta", 31: "alta", 13: "alta", 33: "alta",
@@ -452,6 +453,11 @@ def actualizar(t, salida_site, sitio_url, Geo, archivos, bajar, prev=None):
             humo = None
 
     b7 = cuadros_b7(t, prev, dir_inc, sitio_url, Geo, archivos, bajar)
+    try:                                           # color real propio casi en vivo (bandas 1–3 de día, 13 de noche)
+        import vivo as VV
+        vivo = VV.cuadros(t, ULTIMO_C13, prev, dir_inc, sitio_url, Geo, archivos, bajar)
+    except Exception as ex:
+        print("  incendios: color real propio falló:", ex); vivo = prev.get("vivo", [])
     V = viento() or prev.get("viento", [])
     inc = agrupar(todos, ahora, V)
     temporada = prev.get("temporada", [])
@@ -463,7 +469,7 @@ def actualizar(t, salida_site, sitio_url, Geo, archivos, bajar, prev=None):
         print("  incendios: áreas quemadas falló:", ex)
     js = dict(generado=ahora.strftime("%Y-%m-%dT%H:%MZ"), goes=t.strftime("%Y-%m-%dT%H:%MZ"), zona=[[LAT_S, LON_O], [LAT_N, LON_E]],
               estado=estado, focos=todos, incendios=inc, humo=humo, viento=V, localidades=estado_localidades(inc),
-              coords={n: [a, b] for n, a, b in LOCALIDADES}, industriales=INDUSTRIALES, historial=hist, temporada=temporada, b7=b7, zona_img=[[LAT_S, LON_O], [LAT_N, LON_E]])
+              coords={n: [a, b] for n, a, b in LOCALIDADES}, industriales=INDUSTRIALES, historial=hist, temporada=temporada, b7=b7, vivo=vivo, zona_img=[[LAT_S, LON_O], [LAT_N, LON_E]])
     json.dump(js, open(os.path.join(dir_inc, "data.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     print(f"  incendios: {len(inc)} incendios activos/recientes, {sum(f['industrial'] for f in todos)} puntos industriales descartados")
     return js
@@ -485,6 +491,11 @@ def mantener(salida_site, sitio_url):
                         open(p, "wb").write(r.content)
                 except Exception:
                     pass
+        try:
+            import vivo as VV
+            VV.restaurar(prev.get("vivo", []), os.path.join(dir_inc, "vivo"), sitio_url)
+        except Exception as ex:
+            print("  incendios: no se pudo restaurar el color real propio:", ex)
         for nombre in ("humo.png", "quemadas.geojson"):
             if sitio_url and not os.path.exists(os.path.join(dir_inc, nombre)):
                 try:
