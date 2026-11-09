@@ -72,23 +72,34 @@ const esri = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/W
 /* imagen real del GOES-19 (color real), la más reciente; se renueva cada 10 min */
 let goes = null;
 
-/* GIBS publica las imágenes GOES con 40 a 90 min de atraso y por partes: se busca la más reciente que ya exista y se usa la anterior, que ya está completa */
+/* GIBS publica las imágenes GOES con 40 a 90 min de atraso, por partes y a veces salta horarios:
+   se busca el último horario con varias teselas de Chile ya publicadas y, si a una tesela le falta un horario,
+   se reemplaza por la del horario anterior (hasta 1 hora atrás) */
 const ULT = {};
 function ultimaDisponible(capa, c){
   if (ULT[capa]) return Promise.resolve(ULT[capa]);
   const base = Math.floor((Date.now() - 30 * 60000) / 600000) * 600000;
-  return new Promise(res => { let k = 0;
-    const sig = () => { if (k > 15){ ULT[capa] = new Date(base - 120 * 60000); return res(ULT[capa]); }
-      const d = new Date(base - k++ * 600000), im = new Image();
-      im.onload = () => { ULT[capa] = new Date(d - 600000); setTimeout(() => delete ULT[capa], 9 * 60000); res(ULT[capa]); }; im.onerror = sig;
-      im.src = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${capa}/default/${d.toISOString().slice(0, 19)}Z/${c[0]}/4/9/4.${c[1]}`; };
-    sig(); });
+  const prueba = (d, z) => new Promise(r => { const im = new Image(); im.onload = () => r(true); im.onerror = () => r(false);
+    im.src = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${capa}/default/${d.toISOString().slice(0, 19)}Z/${c[0]}/${z}.${c[1]}`; });
+  return (async () => {
+    for (let k = 0; k <= 15; k++){
+      const d = new Date(base - k * 600000);
+      const ok = await Promise.all(["5/17/9", "5/19/9", "5/21/9"].map(z => prueba(d, z)));
+      if (ok.every(Boolean)){ ULT[capa] = d; setTimeout(() => delete ULT[capa], 9 * 60000); return d; }
+    }
+    return ULT[capa] = new Date(base - 120 * 60000);
+  })();
+}
+function respaldo(capa){
+  return capa.on("tileerror", e => { const t = e.tile, m = t.src.match(/default\/(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ)\//);
+    if (!m || (t._resp = (t._resp || 0) + 1) > 6) return;
+    t.src = t.src.replace(m[1], new Date(Date.parse(m[1]) - 600000).toISOString().slice(0, 19) + "Z"); });
 }
 async function fondoGoes(){
   delete ULT["GOES-East_ABI_GeoColor"];
   const d = await ultimaDisponible("GOES-East_ABI_GeoColor", ["GoogleMapsCompatible_Level7", "png", "best"]), t = d.toISOString().slice(0, 19) + "Z";
   const nueva = L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/GOES-East_ABI_GeoColor/default/${t}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
-    {maxNativeZoom: 7, maxZoom: 15, attribution: "GOES-19 · NOAA / NASA GIBS"});
+    {maxNativeZoom: 7, maxZoom: 15, crossOrigin: "anonymous", attribution: "GOES-19 · NOAA / NASA GIBS"}); respaldo(nueva);
   if ($("#fondo").value !== "goes"){ if (goes) goes.remove(); goes = null; esri.addTo(mapa); return; }
   esri.remove(); nueva.addTo(mapa); nueva.bringToBack(); nueva.once("load", () => { if (goes && goes !== nueva) goes.remove(); goes = nueva; }); setTimeout(() => { if (goes && goes !== nueva) goes.remove(); goes = nueva; }, 4000);
   $("#himg").textContent = "Imagen GOES-19 de las " + d.toLocaleTimeString("es-CL", {hour: "2-digit", minute: "2-digit"});
