@@ -1,0 +1,17 @@
+name: Probar minutarios
+on: workflow_dispatch
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm i playwright@1.49.1 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1
+      - run: |
+          cat > t.js <<'JS'
+          const {chromium}=require('playwright');(async()=>{const b=await chromium.launch();const p=await b.newPage();
+          p.on('console',m=>console.log('CON',m.type(),m.text())); p.on('requestfailed',r=>console.log('FAIL',r.url(),r.failure().errorText));
+          p.on('response',r=>{if(r.url().includes('/api/minutarios'))console.log('RESP',r.status(),r.url())});
+          await p.goto('https://metotec.cl/qc?vista=minu'); await p.waitForTimeout(3000);
+          for (const c of ['170001','220002','330006']){ const r=await p.evaluate(async c=>{const t0=Date.now();const D=await MINU.cargar(c,'2026-11-09',false);return {c,n:D.F.length,T:D.T.length,origen:D.origen,sin:D.sinArchivo,ms:Date.now()-t0}},c); console.log(JSON.stringify(r)); }
+          await b.close();})();
+          JS
+          node t.js
