@@ -11,3 +11,5 @@ jobs:
       - run: |
           curl -s -w "tiempo %{time_total}s\n" -D h.txt -o r.txt "${{ inputs.url }}"; grep -iE "^HTTP|cache|etag|age:|cf-" h.txt; wc -c r.txt
           if [ -n "${{ inputs.buscar }}" ]; then grep -o "${{ inputs.buscar }}.\{0,80\}" r.txt | head -5; fi
+      - uses: actions/upload-artifact@v4
+        with: {name: respuesta, path: r.txt}
