@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Estaciones cerca de incendios · METOTEC</title>
+<meta name="description" content="Estaciones meteorológicas automáticas cerca de incendios en la zona central de Chile: temperatura, humedad y viento, y cómo cambian cuando hay fuego cerca.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{--noche:#0A1F44;--oro:#C9A54C;--tx:#e8edf5;--mu:#9fb0c8;--bd:#22365e;--panel:#0f1c3a;--rojo:#ff3b1f;--nar:#ff8c1a}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font:15px/1.45 Inter,system-ui,"Segoe UI",Roboto,Arial,sans-serif;background:#0b1424;color:var(--tx);display:flex;flex-direction:column}
+header{background:radial-gradient(900px 300px at 85% 0%,#163a73 0%,var(--noche) 62%);border-bottom:3px solid var(--oro);padding:10px 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header img{height:28px}
+header h1{margin:0;font-size:17px}header h1 small{display:block;color:var(--mu);font-weight:500;font-size:12.5px}
+header nav{display:flex;gap:6px}
+header nav a{color:var(--tx);text-decoration:none;font-size:13px;font-weight:600;border:1px solid var(--bd);border-radius:999px;padding:5px 12px}
+header nav a.on{background:var(--oro);color:var(--noche);border-color:var(--oro)}
+main{flex:1;display:grid;grid-template-columns:1fr 400px;min-height:0}
+#mapa{min-height:320px;background:#0d1418}
+aside{border-left:1px solid var(--bd);overflow:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+.res{display:flex;gap:8px}.res div{flex:1;background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:8px 12px}
+.res b{display:block;font-size:22px}.res span{color:var(--mu);font-size:12px}
+.est{background:var(--panel);border:1px solid var(--bd);border-left:4px solid var(--c);border-radius:10px;padding:10px 12px;cursor:pointer}
+.est:hover,.est.sel{background:#16264a}
+.est .t{font-size:12.5px;color:var(--mu)}.est .t b{color:var(--tx)}
+.est h3{margin:2px 0 4px;font-size:15px}
+.est .v{display:flex;gap:16px;font-size:13px;color:var(--mu)}.est .v b{font-size:18px;color:var(--tx)}
+.sube{color:#ff7a59!important}.baja{color:#5ac8fa!important}
+.det{background:var(--panel);border:1px solid var(--oro);border-radius:12px;padding:12px 14px}
+.det h3{margin:0 0 2px}.det small{color:var(--mu)}
+.vacio{color:var(--mu);font-size:14px;margin:0}
+.aviso{font-size:12.5px;color:var(--mu);border-top:1px solid var(--bd);padding-top:10px}.aviso b{color:var(--tx)}
+.lbl{background:rgba(10,20,40,.92);border:2px solid var(--c);color:#fff;border-radius:7px;padding:2px 6px;font:700 13px/1.2 inherit;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.5);transform:translate(-50%,-50%);position:absolute}
+.lbl small{font-weight:700;color:var(--c)}
+.leaflet-container{font-family:inherit}
+@media (max-width:900px){main{grid-template-columns:1fr;grid-template-rows:60vh auto}aside{border-left:0;border-top:1px solid var(--bd)}}
+</style>
+</head>
+<body>
+<header>
+ <a href="https://metotec.cl"><img src="logo_blanco.svg" alt="METOTEC"></a>
+ <h1>Estaciones cerca de incendios<small id="act">Cargando…</small></h1>
+ <nav><a href="index.html">Incendios</a><a class="on" href="estaciones.html">Estaciones cerca de incendios</a></nav>
+</header>
+<main>
+ <div id="mapa"></div>
+ <aside>
+  <div class="res" id="res"></div>
+  <div id="det"></div>
+  <div id="lista"></div>
+  <div class="aviso">Estaciones meteorológicas automáticas de la Dirección Meteorológica de Chile a 30 km o menos de un incendio detectado por satélite en las últimas 6 horas. En el mapa, cada estación muestra su temperatura y cuánto cambió en la última hora. Un alza brusca de temperatura con caída de humedad, sobre todo si el viento lleva el humo hacia la estación, puede ser efecto del incendio.
+   <br><br><b>Información de apoyo, no oficial. Emergencias: CONAF 130 · Bomberos 132.</b>
+   <br>Fuentes: estaciones DMC (control de calidad METOTEC) · NOAA GOES-19 y NASA FIRMS · imagen NASA GIBS.</div>
+ </aside>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
+const ms = t => Date.parse(t.length === 17 ? t.replace("Z", ":00Z") : t);
+const API = "https://metotec.cl/api/estaciones_incendio";
+const DIRS = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
+const mapa = L.map("mapa").setView([-34.35, -71.0], 8);
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, attribution: "Imagen © Esri"}).addTo(mapa);
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, opacity: .8}).addTo(mapa);
+const capas = {fuego: L.layerGroup().addTo(mapa), est: L.layerGroup().addTo(mapa), lineas: L.layerGroup().addTo(mapa)};
+let E = [], D = null, sel = null, primeraVez = true;
+
+function cambio(e){
+  const S = e.serie || [], u = S[S.length - 1] || [], p = S[S.length - 2] || [];
+  const d = i => u[i] != null && p[i] != null ? +(u[i] - p[i]).toFixed(1) : null;
+  return {T: u[1], HR: u[2], ff: u[3], dd: u[4], dT: d(1), dH: d(2), hora: u[0]};
+}
+function nivel(c){ return (c.dT != null && c.dT >= 3) || (c.dH != null && c.dH <= -15) ? 2 : (c.dT != null && c.dT >= 1.5) || (c.dH != null && c.dH <= -8) ? 1 : 0; }
+const COL = ["#8aa0bf", "#ff8c1a", "#ff3b1f"];
+
+function grafico(e){
+  const S = e.serie || []; if (S.length < 2) return `<p class="vacio">Sin serie suficiente.</p>`;
+  const W = 360, H = 150, x0 = 30, x1 = W - 30, y0 = 10, y1 = H - 22, n = S.length, X = i => x0 + (x1 - x0) * i / (n - 1);
+  const sc = (k) => { const v = S.map(r => r[k]).filter(x => x != null); const lo = Math.min(...v), hi = Math.max(...v); const a = hi - lo < 2 ? lo - 1 : lo, b = hi - lo < 2 ? hi + 1 : hi; return [a, b, y => y1 - (y - a) / (b - a) * (y1 - y0)]; };
+  const [ta, tb, YT] = sc(1), [ha, hb, YH] = sc(2);
+  const lin = (k, Y) => S.map((r, i) => r[k] == null ? "" : `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(r[k]).toFixed(1)}`).join("");
+  const xs = S.map((r, i) => `<text x="${X(i)}" y="${H - 6}" text-anchor="middle" fill="#9fb0c8" font-size="10">${r[0]}</text>`).join("");
+  // momento en que se detectó el fuego (hora UTC de la serie)
+  let fz = "";
+  if (e.primera){ const h = new Date(ms(e.primera)), hh = String(h.getUTCHours()).padStart(2, "0") + ":00"; const i = hh > S[0][0] ? S.findIndex(r => r[0] >= hh) : -1;
+    if (i > 0) fz = `<line x1="${X(i)}" x2="${X(i)}" y1="${y0}" y2="${y1}" stroke="#ff3b1f" stroke-dasharray="4 3"/><text x="${X(i) + 3}" y="${y0 + 10}" fill="#ff3b1f" font-size="10">fuego</text>`; }
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%">${fz}
+    <path d="${lin(1, YT)}" fill="none" stroke="#ff7a59" stroke-width="2.4"/><path d="${lin(2, YH)}" fill="none" stroke="#5ac8fa" stroke-width="2.4"/>
+    <text x="4" y="${YT(tb) + 4}" fill="#ff7a59" font-size="10">${tb.toFixed(0)}°</text><text x="4" y="${YT(ta) + 4}" fill="#ff7a59" font-size="10">${ta.toFixed(0)}°</text>
+    <text x="${W - 4}" y="${YH(hb) + 4}" fill="#5ac8fa" font-size="10" text-anchor="end">${hb.toFixed(0)}%</text><text x="${W - 4}" y="${YH(ha) + 4}" fill="#5ac8fa" font-size="10" text-anchor="end">${ha.toFixed(0)}%</text>${xs}</svg>
+    <small><span style="color:#ff7a59">━ temperatura</span> · <span style="color:#5ac8fa">━ humedad</span> · horas UTC</small>`;
+}
+function detalle(k){
+  sel = k; const e = E[k], c = cambio(e);
+  document.querySelectorAll(".est").forEach(x => x.classList.toggle("sel", +x.dataset.k === k));
+  $("#det").innerHTML = `<div class="det"><h3>${esc(e.nombre)}</h3><small>${e.codigo} · ${e.alt ?? "—"} m · incendio a ${e.dist} km al ${e.rumbo}${e.a_sotavento ? " · <b style='color:#ff8c1a'>el viento lleva el humo hacia la estación</b>" : ""}</small>
+    ${grafico(e)}
+    <div style="display:flex;gap:16px;font-size:13.5px;margin-top:6px"><span>Viento ${c.dd != null ? DIRS[Math.round(c.dd / 45) % 8] : ""} <b>${c.ff ?? "—"}</b> kt</span><span>Último dato ${c.hora ?? "—"} UTC</span></div></div>`;
+  mapa.setView([e.lat, e.lon], Math.max(mapa.getZoom(), 10));
+}
+function pintar(){
+  capas.est.clearLayers(); capas.lineas.clearLayers(); capas.fuego.clearLayers();
+  // fuego de las últimas 6 h (huella del píxel)
+  if (D){ const t0 = Date.now() - 6 * 3600000;
+    D.focos.filter(f => !f.industrial && ms(f.t) >= t0).forEach(f => {
+      const h = f.fuente === "GOES-19" ? 1.25 : f.fuente.startsWith("MODIS") ? .5 : .19, dla = h / 111, dlo = h / (111 * Math.cos(f.lat * Math.PI / 180));
+      const m = (Date.now() - ms(f.t)) / 60000, col = m <= 60 ? "#ff3b1f" : "#ff8c1a";
+      L.rectangle([[f.lat - dla, f.lon - dlo], [f.lat + dla, f.lon + dlo]], {stroke: false, fillColor: col, fillOpacity: f.fuente === "GOES-19" ? .3 : .85}).addTo(capas.fuego);
+    }); }
+  const res = [0, 0, 0];
+  E.forEach((e, k) => {
+    const c = cambio(e), n = nivel(c); res[n]++;
+    const html = `<div class="lbl" style="--c:${COL[n]}">${c.T != null ? Math.round(c.T) + "°" : "—"} <small>${c.dT != null ? (c.dT > 0 ? "▲" : c.dT < 0 ? "▼" : "") + Math.abs(c.dT) : ""}</small><br><span style="font-weight:600;color:#9fd3ff">${c.HR != null ? Math.round(c.HR) + "%" : ""}</span></div>`;
+    L.marker([e.lat, e.lon], {icon: L.divIcon({className: "", html, iconSize: [0, 0]})}).on("click", () => detalle(k)).addTo(capas.est);
+    // línea al incendio más cercano
+    if (D){ const i = D.incendios.filter(i => i.relevante !== false).sort((a, b) => (a.lat - e.lat) ** 2 + (a.lon - e.lon) ** 2 - (b.lat - e.lat) ** 2 - (b.lon - e.lon) ** 2)[0];
+      if (i){ e.primera = i.primera; L.polyline([[e.lat, e.lon], [i.lat, i.lon]], {color: COL[n], weight: 1.5, dashArray: "4 4", opacity: .8}).addTo(capas.lineas); } }
+  });
+  $("#res").innerHTML = `<div><b>${E.length}</b><span>estaciones a ≤ 30 km de un incendio</span></div><div><b style="color:${COL[2]}">${res[2]}</b><span>con cambio brusco en 1 h</span></div>`;
+  $("#lista").innerHTML = E.length ? E.map((e, k) => { const c = cambio(e), n = nivel(c);
+    return `<div class="est" data-k="${k}" style="--c:${COL[n]}"><div class="t">Incendio a <b>${e.dist} km</b> al ${e.rumbo}${e.a_sotavento ? " · el humo va hacia la estación" : ""}</div><h3>${esc(e.nombre)}</h3>
+      <div class="v"><span><b>${c.T ?? "—"}</b> °C ${c.dT != null ? `<span class="${c.dT > 0 ? "sube" : "baja"}">${c.dT > 0 ? "+" : ""}${c.dT} en 1 h</span>` : ""}</span>
+      <span><b>${c.HR ?? "—"}</b> % ${c.dH != null ? `<span class="${c.dH < 0 ? "sube" : "baja"}">${c.dH > 0 ? "+" : ""}${c.dH} en 1 h</span>` : ""}</span>
+      <span>${c.dd != null ? DIRS[Math.round(c.dd / 45) % 8] : ""} <b>${c.ff ?? "—"}</b> kt</span></div>
+      ${n === 2 ? `<small style="color:#ff8c1a">Cambio brusco en la última hora: puede ser efecto del incendio.</small>` : ""}</div>`; }).join("")
+    : `<p class="vacio">Ninguna estación automática está a menos de 30 km de un incendio relevante de las últimas 6 horas.</p>`;
+  if (sel != null && E[sel]) detalle(sel);
+  if (primeraVez && E.length){ mapa.fitBounds(L.latLngBounds(E.map(e => [e.lat, e.lon])).pad(.4), {maxZoom: 10}); primeraVez = false; }
+}
+async function cargar(){
+  try { const r = await fetch(API, {cache: "no-store"}); const j = r.ok ? await r.json() : {estaciones: []}; E = (j.estaciones || []).sort((a, b) => a.dist - b.dist);
+    $("#act").textContent = j.generado ? `Actualizado ${new Date(j.generado).toLocaleTimeString("es-CL", {hour: "2-digit", minute: "2-digit"})} · cada 30 minutos` : "Sin datos todavía"; } catch (e) { E = []; $("#act").textContent = "No se pudo leer las estaciones"; }
+  try { const r = await fetch("data.json?t=" + Date.now(), {cache: "no-store"}); D = r.ok ? await r.json() : null; } catch (e) { D = null; }
+  pintar();
+}
+document.addEventListener("click", ev => { const x = ev.target.closest(".est"); if (x) detalle(+x.dataset.k); });
+cargar(); setInterval(cargar, 5 * 60 * 1000);
+</script>
+</body>
+</html>

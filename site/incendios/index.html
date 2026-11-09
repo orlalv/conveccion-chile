@@ -4,263 +4,297 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Incendios y humo · METOTEC</title>
-<meta name="description" content="Focos de incendio y humo detectados por satélite en la zona central de Chile, actualizado cada 10 minutos.">
+<meta name="description" content="Focos de incendio, humo y áreas quemadas vistos por satélite en la zona central de Chile, con animación de hasta 72 horas.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
-:root{--noche:#0A1F44;--oro:#C9A54C;--tx:#e8edf5;--mu:#9fb0c8;--bd:#22365e;--panel:#0f1c3a;--rojo:#ff4d3d;--nar:#ff9f1c;--ama:#ffd23f}
+:root{--noche:#0A1F44;--oro:#C9A54C;--tx:#e8edf5;--mu:#9fb0c8;--bd:#22365e;--panel:#0f1c3a;--rojo:#ff3b1f;--nar:#ff8c1a;--osc:#c0392b}
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;font:15px/1.45 Inter,system-ui,"Segoe UI",Roboto,Arial,sans-serif;background:#0b1424;color:var(--tx);display:flex;flex-direction:column}
 header{background:radial-gradient(900px 300px at 85% 0%,#163a73 0%,var(--noche) 62%);border-bottom:3px solid var(--oro);padding:10px 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 header img{height:28px}
 header h1{margin:0;font-size:17px}header h1 small{display:block;color:var(--mu);font-weight:500;font-size:12.5px}
+header nav{display:flex;gap:6px}
+header nav a{color:var(--tx);text-decoration:none;font-size:13px;font-weight:600;border:1px solid var(--bd);border-radius:999px;padding:5px 12px}
+header nav a.on{background:var(--oro);color:var(--noche);border-color:var(--oro)}
 .sel{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mu)}
-.sel select{background:var(--panel);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:6px 8px;font:600 14px inherit}
-main{flex:1;display:grid;grid-template-columns:1fr 380px;min-height:0}
-#mapa{min-height:300px;background:#0d1418}
+select{background:var(--panel);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:6px 8px;font:600 13.5px inherit}
+main{flex:1;display:grid;grid-template-columns:1fr 360px;min-height:0}
+#mapwrap{position:relative;min-height:320px}#mapa{position:absolute;inset:0;background:#0d1418}
 aside{border-left:1px solid var(--bd);overflow:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
-.estado{border-radius:12px;padding:14px 16px;border:1px solid var(--bd);background:var(--panel)}
-.estado b{display:block;font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
+.estado{border-radius:12px;padding:12px 14px;border:1px solid var(--bd);background:var(--panel)}
+.estado b{display:block;font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px}
 .estado.n0{border-color:#2f6b4a}.estado.n0 b{color:#6fcf97}
-.estado.n1{border-color:#8a6a1f}.estado.n1 b{color:var(--ama)}
+.estado.n1{border-color:#8a6a1f}.estado.n1 b{color:#ffd23f}
 .estado.n2{border-color:#8a2a22}.estado.n2 b{color:var(--rojo)}
-h2{font-size:14px;margin:4px 0 0;color:var(--mu);text-transform:uppercase;letter-spacing:.08em}
-.inc{background:var(--panel);border:1px solid var(--bd);border-left:4px solid var(--c);border-radius:10px;padding:10px 12px;cursor:pointer}
-.inc:hover{background:#16264a}
+h2{font-size:12.5px;margin:6px 0 0;color:var(--mu);text-transform:uppercase;letter-spacing:.08em}
+.inc,.qm{background:var(--panel);border:1px solid var(--bd);border-left:4px solid var(--c,#ff7a59);border-radius:10px;padding:10px 12px;cursor:pointer}
+.inc:hover,.qm:hover{background:#16264a}
 .inc .t{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;color:var(--mu)}
-.inc p{margin:4px 0 0;font-size:14px}
-.vacio{color:var(--mu);font-size:14px}
+.inc p{margin:4px 0 0;font-size:14px}.qm small{color:var(--mu)}
+.vacio{color:var(--mu);font-size:13.5px;margin:0}
 .cap{display:flex;flex-wrap:wrap;gap:6px}
 .cap label{display:flex;align-items:center;gap:5px;background:var(--panel);border:1px solid var(--bd);border-radius:999px;padding:4px 10px;font-size:12.5px;cursor:pointer}
 .ley{font-size:12.5px;color:var(--mu);display:grid;gap:4px}
-.ley i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:-1px}
-.aviso{font-size:12.5px;color:var(--mu);border-top:1px solid var(--bd);padding-top:10px}
-.aviso b{color:var(--tx)}
+.ley i{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-2px;border-radius:2px}
+.aviso{font-size:12.5px;color:var(--mu);border-top:1px solid var(--bd);padding-top:10px}.aviso b{color:var(--tx)}
+.tl{position:absolute;left:12px;right:12px;bottom:12px;z-index:800;background:rgba(10,20,40,.92);border:1px solid var(--bd);border-radius:12px;padding:10px 12px;display:grid;gap:6px}
+.tl .f1{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.tl button{background:var(--oro);color:var(--noche);border:0;border-radius:7px;font:800 14px inherit;padding:6px 12px;cursor:pointer;min-width:40px}
+.tl input[type=range]{width:100%;accent-color:var(--oro)}
+.tl .hora{font:700 15px inherit;min-width:150px}
+.tl small{color:var(--mu);font-size:12px}
+.tl .marcas{position:relative;height:8px;margin:0 8px}
+.tl .marcas i{position:absolute;top:0;width:3px;height:8px;background:var(--rojo);border-radius:1px;opacity:.85}
 .flecha{color:#9fd3ff;font-size:16px;line-height:16px;text-align:center;text-shadow:0 0 3px #000}
-.est{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:10px 12px;cursor:pointer}
-.est:hover{background:#16264a}.est .t{display:flex;justify-content:space-between;font-size:12.5px;color:var(--mu)}
-.est .v{display:flex;gap:14px;margin-top:4px;font-size:14px}.est .v b{font-size:16px}.est small{color:var(--mu)}
-.est .sube{color:#ff7a59}.est .baja{color:#5ac8fa}
-.est svg{display:block;margin-top:4px}
-.qm{background:var(--panel);border:1px solid var(--bd);border-left:4px solid #ff7a59;border-radius:10px;padding:10px 12px;cursor:pointer;font-size:14px}
-.qm small{color:var(--mu)}
-#mapwrap{position:relative;min-height:300px}#mapa{position:absolute;inset:0}
-.anim{position:absolute;left:12px;right:12px;bottom:12px;z-index:800;background:rgba(10,20,40,.9);border:1px solid var(--bd);border-radius:10px;padding:8px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.anim button{background:var(--oro);color:#0A1F44;border:0;border-radius:6px;font:700 13px inherit;padding:5px 10px;cursor:pointer;min-width:34px}
-.anim input[type=range]{flex:1;min-width:160px;accent-color:var(--oro)}
-.anim select{background:var(--panel);color:var(--tx);border:1px solid var(--bd);border-radius:6px;padding:4px 6px;font:600 12.5px inherit}
-.anim .hora{font:700 14px inherit;min-width:120px}.anim small{color:var(--mu)}
 .etq{background:rgba(10,20,40,.9)!important;color:#fff!important;border:1px solid var(--oro)!important;font-size:12px!important}
-@media (max-width:900px){main{grid-template-columns:1fr;grid-template-rows:60vh auto}aside{border-left:0;border-top:1px solid var(--bd)}.sel{margin-left:0;width:100%}}
+.leaflet-container{font-family:inherit}
+@media (max-width:900px){main{grid-template-columns:1fr;grid-template-rows:65vh auto}aside{border-left:0;border-top:1px solid var(--bd)}.sel{margin-left:0;width:100%}}
 </style>
 </head>
 <body>
 <header>
  <a href="https://metotec.cl"><img src="logo_blanco.svg" alt="METOTEC"></a>
  <h1>Incendios y humo · zona central<small id="act">Cargando…</small></h1>
+ <nav><a class="on" href="index.html">Incendios</a><a href="estaciones.html">Estaciones cerca de incendios</a></nav>
  <div class="sel">Mi comuna <select id="comuna"></select></div>
 </header>
 <main>
  <div id="mapwrap"><div id="mapa"></div>
-  <div class="anim"><button id="play" title="Animar las últimas 3 horas">▶</button><input type="range" id="paso" min="0" max="17" value="17"><span class="hora" id="hframe">—</span>
-   <select id="fondo"><option value="geo">Satélite: color real / noche (GeoColor)</option><option value="ir">Satélite: infrarrojo (banda 13)</option><option value="esri">Mapa base (sin tiempo)</option></select>
-   <small id="nota">GOES-19 vía NASA GIBS · las imágenes llegan con ~40 min de atraso</small></div>
+  <div class="tl">
+   <div class="f1">
+    <button id="play" title="Animar">▶</button>
+    <select id="rango" title="Período"><option value="3">Últimas 3 horas</option><option value="12">Últimas 12 horas</option><option value="24" selected>Últimas 24 horas</option><option value="72">Últimas 72 horas</option></select>
+    <span class="hora" id="hframe">—</span>
+    <select id="fondo" title="Imagen de fondo"><option value="geo">Satélite · color real (humo)</option><option value="b7">Satélite · fuego (banda 7, 6 h)</option><option value="ir">Satélite · infrarrojo (banda 13)</option><option value="esri">Mapa base</option></select>
+   </div>
+   <input type="range" id="paso" min="0" max="1" value="1">
+   <div class="marcas" id="marcas" title="Momentos con fuego detectado"></div>
+   <small id="nota">Imágenes GOES-19 (NOAA, vía NASA GIBS) con ~40 min de atraso · los focos se acumulan hasta la hora mostrada</small>
+  </div>
  </div>
  <aside>
   <div class="estado" id="estado"><b>—</b><span>Cargando…</span></div>
   <div class="cap">
+   <label><input type="checkbox" id="cFocos" checked> Focos</label>
    <label><input type="checkbox" id="cHumo" checked> Humo</label>
-   <label><input type="checkbox" id="cViento" checked> Viento</label>
+   <label><input type="checkbox" id="cViento"> Viento</label>
    <label><input type="checkbox" id="cQuem" checked> Áreas quemadas</label>
-   <label><input type="checkbox" id="cEst" checked> Estaciones</label>
-   <label><input type="checkbox" id="cInd"> Puntos industriales</label>
    <label><input type="checkbox" id="cChicos"> Focos pequeños</label>
+   <label><input type="checkbox" id="cInd"> Puntos industriales</label>
   </div>
-  <h2>Incendios detectados (últimas 24 h)</h2>
+  <h2>Incendios</h2>
   <div id="lista"></div>
-  <h2>Estaciones meteorológicas cerca de incendios</h2>
-  <div id="estac"></div>
   <h2>Áreas quemadas de la temporada</h2>
   <div id="quem"></div>
   <div class="ley">
-   <span><i style="background:var(--rojo)"></i>Fuego detectado hace menos de 1 hora</span>
-   <span><i style="background:var(--nar)"></i>Hace 1 a 6 horas</span>
-   <span><i style="background:var(--ama)"></i>Hace 6 a 24 horas</span>
-   <span><i style="background:#8a94a6"></i>Punto caliente industrial (no es incendio)</span>
-   <span><i style="background:rgba(205,190,160,.8);border-radius:2px"></i>Humo (solo de día)</span>
-   <span><i style="background:rgba(150,40,20,.6);border:1px solid #ff7a59;border-radius:2px"></i>Área quemada (Sentinel-2)</span>
-   <span><i style="background:#2d9cdb;border:2px solid #fff;border-radius:2px"></i>Estación meteorológica automática (DMC)</span>
+   <span><i style="background:var(--rojo)"></i>Fuego activo (detectado en la última hora del cuadro)</span>
+   <span><i style="background:var(--nar)"></i>Ardió hace 1 a 6 horas</span>
+   <span><i style="background:var(--osc)"></i>Ardió hace más de 6 horas</span>
+   <span><i style="background:transparent;border:2px dashed #ffd23f"></i>Zona afectada por el incendio (contorno de los focos)</span>
+   <span><i style="background:rgba(150,40,20,.6);border:1px solid #ff7a59"></i>Área quemada medida con Sentinel-2</span>
+   <span><i style="background:rgba(205,190,160,.8)"></i>Humo (última imagen de día)</span>
   </div>
-  <div class="aviso"><b>Información de apoyo, no oficial.</b> El satélite detecta incendios cuando ya tienen cierto tamaño y no ve bajo las nubes: no reemplaza los avisos de CONAF ni de SENAPRED.
-   <br><b>Emergencias: CONAF 130 · Bomberos 132.</b><br>Fuentes: NOAA GOES-19 (focos y humo, cada 10 min) · NASA FIRMS (VIIRS/MODIS) · Copernicus Sentinel-2 (áreas quemadas) · estaciones automáticas de la Dirección Meteorológica de Chile · viento de Open-Meteo. Iniciativa sin fines de lucro de <a href="https://metotec.cl" style="color:var(--oro)">METOTEC</a>.</div>
+  <div class="aviso">Cada foco se dibuja con el tamaño del píxel que lo detectó: 375 m (VIIRS), 1 km (MODIS) o ~2,5 km (GOES-19, que avisa antes pero con menos detalle).
+   <br><br><b>Información de apoyo, no oficial.</b> El satélite detecta incendios cuando ya tienen cierto tamaño y no ve bajo las nubes; no reemplaza los avisos de CONAF ni de SENAPRED. <b>Emergencias: CONAF 130 · Bomberos 132.</b>
+   <br>Fuentes: NOAA GOES-19 · NASA FIRMS (VIIRS/MODIS) y GIBS · Copernicus Sentinel-2 · viento de Open-Meteo. Iniciativa sin fines de lucro de <a href="https://metotec.cl" style="color:var(--oro)">METOTEC</a>.</div>
  </aside>
 </main>
 <script>
 const $ = s => document.querySelector(s);
 const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
-const mapa = L.map("mapa", {zoomControl: true}).setView([-34.35, -71.0], 8);
-const esri = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, attribution: "Imagen © Esri"});
-/* ---- imágenes GOES-19 en el tiempo (NASA GIBS) ---- */
-const GIBS = {geo: "GOES-East_ABI_GeoColor", ir: "GOES-East_ABI_Band13_Clean_Infrared"};
-const PLANT = [];
-["best", "nrt", "all"].forEach(ep => [7, 8, 6].forEach(n => ["png", "jpg"].forEach(f => PLANT.push([`GoogleMapsCompatible_Level${n}`, f, ep]))));
-const conf = {};
-let FR = [], capasT = [], iFr = 17, anim = null, fondo = "geo";
-function tiempos(){
-  const t = Math.floor((Date.now() - 45 * 60000) / 600000) * 600000;
-  return Array.from({length: 18}, (_, i) => new Date(t - (17 - i) * 600000));
-}
-const iso = d => d.toISOString().slice(0, 19) + "Z";
-function urlTile(capa, c, d, z, x, y){ return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${GIBS[capa]}/default/${iso(d)}/${c[0]}/${z}/${y}/${x}.${c[1]}`; }
-function probar(capa){
-  if (conf[capa] !== undefined) return Promise.resolve(conf[capa]);
-  const d = tiempos()[12], z = 4, x = 4, y = 9;                      // tesela sobre Chile central
-  return new Promise(res => { let k = 0;
-    const sig = () => { if (k >= PLANT.length){ conf[capa] = null; return res(null); }
-      const c = PLANT[k++], im = new Image(); im.onload = () => { conf[capa] = c; res(c); }; im.onerror = sig; im.src = urlTile(capa, c, d, z, x, y); };
-    sig(); });
-}
-async function armarFondo(){
-  capasT.forEach(l => l.remove()); capasT = []; esri.remove();
-  if (fondo === "esri"){ esri.addTo(mapa); esri.bringToBack(); $("#hframe").textContent = "Mapa base"; return; }
-  const c = await probar(fondo);
-  if (!c){ esri.addTo(mapa); $("#nota").textContent = "No se pudo cargar la imagen GOES-19 de NASA GIBS; se muestra el mapa base."; return; }
-  FR = tiempos();
-  const mz = +c[0].match(/Level(\d+)/)[1];
-  capasT = FR.map(d => L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${GIBS[fondo]}/default/${iso(d)}/${c[0]}/{z}/{y}/{x}.${c[1]}`,
-    {maxNativeZoom: mz, maxZoom: 15, opacity: 0, attribution: "GOES-19 · NASA GIBS / NOAA", className: "gibs"}).addTo(mapa));
-  capasT.forEach(l => l.bringToBack());
-  verFrame(iFr);
-}
-function verFrame(i){
-  iFr = i; $("#paso").value = i;
-  capasT.forEach((l, k) => l.setOpacity(k === i ? 1 : 0));
-  if (FR[i]) $("#hframe").textContent = FR[i].toLocaleString("es-CL", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}) + (i === FR.length - 1 ? " · última" : "");
-  if (D) pintarFocos();
-}
-$("#paso").addEventListener("input", ev => { pararAnim(); verFrame(+ev.target.value); });
-function pararAnim(){ if (anim){ clearInterval(anim); anim = null; $("#play").textContent = "▶"; } }
-$("#play").addEventListener("click", () => { if (anim) return pararAnim(); $("#play").textContent = "❚❚"; if (iFr >= 17) verFrame(0);
-  anim = setInterval(() => { if (iFr >= 17){ pararAnim(); return; } verFrame(iFr + 1); }, 700); });
-$("#fondo").addEventListener("change", ev => { pararAnim(); fondo = ev.target.value; armarFondo(); });
-armarFondo();
-setInterval(() => { if (!anim && fondo !== "esri" && iFr === 17) armarFondo(); }, 10 * 60000);
-L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, pane: "overlayPane", opacity: .9}).addTo(mapa);
-const capas = {focos: L.layerGroup().addTo(mapa), ind: L.layerGroup(), viento: L.layerGroup().addTo(mapa), inc: L.layerGroup().addTo(mapa), est: L.layerGroup().addTo(mapa), quem: L.layerGroup().addTo(mapa)};
-let EST = null, QM = null;
-const API_EST = "https://metotec.cl/api/estaciones_incendio";
-let humo = null, D = null;
 const leer = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
-const edadMin = t => (Date.now() - Date.parse(t.replace("Z", ":00Z"))) / 60000;
-const colEdad = m => m < 60 ? "#ff4d3d" : m < 360 ? "#ff9f1c" : "#ffd23f";
-const hora = t => new Date(Date.parse(t.replace("Z", ":00Z"))).toLocaleTimeString("es-CL", {hour: "2-digit", minute: "2-digit"});
-const haceTxt = m => m < 60 ? `hace ${Math.round(m)} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : "ayer";
-async function cargarExtra(){
-  try { const r = await fetch(API_EST, {cache: "no-store"}); EST = r.ok ? await r.json() : null; } catch (e) { EST = null; }
-  try { const r = await fetch("quemadas.geojson?t=" + Date.now(), {cache: "no-store"}); QM = r.ok ? await r.json() : null; } catch (e) { QM = null; }
-  if (D) pintarExtra();
+const ms = t => Date.parse(t.length === 17 ? t.replace("Z", ":00Z") : t);
+const hora = t => new Date(typeof t === "number" ? t : ms(t)).toLocaleTimeString("es-CL", {hour: "2-digit", minute: "2-digit"});
+const fechaHora = d => d.toLocaleString("es-CL", {weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"});
+const haceTxt = m => m < 60 ? `hace ${Math.round(m)} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} d`;
+
+const mapa = L.map("mapa", {zoomControl: true}).setView([-34.35, -71.0], 8);
+const esri = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, attribution: "Imagen © Esri"});
+const gris = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, attribution: "© Esri"});
+mapa.createPane("satelite"); mapa.getPane("satelite").style.zIndex = 250;
+mapa.createPane("etiquetas"); mapa.getPane("etiquetas").style.zIndex = 450; mapa.getPane("etiquetas").style.pointerEvents = "none";
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, pane: "etiquetas", opacity: .85}).addTo(mapa);
+const capas = {focos: L.layerGroup().addTo(mapa), contornos: L.layerGroup().addTo(mapa), ind: L.layerGroup(), viento: L.layerGroup(), quem: L.layerGroup().addTo(mapa)};
+let D = null, QM = null, humo = null;
+
+/* ---------- línea de tiempo e imágenes ---------- */
+const GIBS = {geo: "GOES-East_ABI_GeoColor", ir: "GOES-East_ABI_Band13_Clean_Infrared"};
+const PLANT = []; ["best", "nrt", "all"].forEach(ep => [7, 8, 6].forEach(n => ["png", "jpg"].forEach(f => PLANT.push([`GoogleMapsCompatible_Level${n}`, f, ep]))));
+const conf = {}, cache = {};
+let FR = [], iFr = 0, anim = null, fondo = "geo", visible = null;
+const PASO = {3: 10, 12: 20, 24: 30, 72: 60};
+const iso = d => d.toISOString().slice(0, 19) + "Z";
+function cuadros(){
+  if (fondo === "b7") return (D && D.b7 || []).map(ts => new Date(Date.UTC(+ts.slice(0, 4), +ts.slice(4, 6) - 1, +ts.slice(6, 8), +ts.slice(8, 10), +ts.slice(10, 12))));
+  const h = +$("#rango").value, p = PASO[h] * 60000, fin = Math.floor((Date.now() - 45 * 60000) / p) * p, n = Math.round(h * 60 / PASO[h]);
+  return Array.from({length: n + 1}, (_, i) => new Date(fin - (n - i) * p));
 }
-const DIRS = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
-function mini(vals, col){
-  const v = vals.filter(x => x != null); if (v.length < 2) return "";
-  const lo = Math.min(...v), hi = Math.max(...v), W = 120, H = 26, n = vals.length;
-  const pts = vals.map((x, i) => x == null ? null : `${(i * (W - 4) / (n - 1) + 2).toFixed(1)},${(H - 3 - (hi > lo ? (x - lo) / (hi - lo) : .5) * (H - 6)).toFixed(1)}`).filter(Boolean).join(" ");
-  return `<svg width="${W}" height="${H}"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.8"/></svg>`;
+function probar(capa){
+  if (conf[capa] !== undefined) return Promise.resolve(conf[capa]);
+  const d = new Date(Math.floor((Date.now() - 90 * 60000) / 600000) * 600000);
+  return new Promise(res => { let k = 0;
+    const sig = () => { if (k >= PLANT.length){ conf[capa] = null; return res(null); }
+      const c = PLANT[k++], im = new Image();
+      im.onload = () => { conf[capa] = c; res(c); }; im.onerror = sig;
+      im.src = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${GIBS[capa]}/default/${iso(d)}/${c[0]}/4/9/4.${c[1]}`; };
+    sig(); });
 }
-function pintarExtra(){
-  capas.est.clearLayers(); capas.quem.clearLayers();
-  const E = (EST && EST.estaciones) || [];
-  E.forEach(e => {
-    const ic = L.divIcon({className: "", html: `<div style="width:12px;height:12px;background:#2d9cdb;border:2px solid #fff;border-radius:2px;box-shadow:0 0 0 1px #000"></div>`, iconSize: [12, 12]});
-    L.marker([e.lat, e.lon], {icon: ic}).bindTooltip(`${esc(e.nombre)} · incendio a ${e.dist} km`).addTo(capas.est);
+function capaDe(i){
+  const d = FR[i], k = fondo + iso(d);
+  if (cache[k]) return cache[k];
+  let l;
+  if (fondo === "b7") l = L.imageOverlay(`b7/${D.b7[i]}.png`, D.zona_img, {opacity: 0, pane: "satelite"});
+  else {
+    const c = conf[fondo], mz = +c[0].match(/Level(\d+)/)[1];
+    l = L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${GIBS[fondo]}/default/${iso(d)}/${c[0]}/{z}/{y}/{x}.${c[1]}`,
+      {maxNativeZoom: mz, maxZoom: 15, opacity: 0, pane: "satelite", attribution: "GOES-19 · NOAA / NASA GIBS"});
+  }
+  return cache[k] = l;
+}
+async function armarFondo(){
+  pararAnim();
+  Object.values(cache).forEach(l => l.remove()); Object.keys(cache).forEach(k => delete cache[k]); visible = null;
+  esri.remove(); gris.remove();
+  let nota = "Imágenes GOES-19 (NOAA, vía NASA GIBS) con ~40 min de atraso · los focos se acumulan hasta la hora mostrada";
+  if (fondo === "esri") esri.addTo(mapa);
+  else if (fondo === "b7"){
+    gris.addTo(mapa);
+    nota = D && D.b7 && D.b7.length ? "Banda 7 (3,9 µm) del GOES-19, últimas 6 horas: el fuego aparece como puntos amarillos, rojos o blancos según su calor."
+      : "Todavía no hay imágenes de banda 7 guardadas; se agrega una cada 10 minutos.";
+  } else {
+    const c = await probar(fondo);
+    if (!c){ esri.addTo(mapa); nota = "No se pudo cargar la imagen GOES-19 de NASA GIBS; se muestra el mapa base."; fondo = "esri"; $("#fondo").value = "esri"; }
+  }
+  $("#nota").textContent = nota;
+  $("#rango").disabled = fondo === "b7";
+  FR = cuadros();
+  if (!FR.length){ fondo = fondo === "b7" ? "b7" : fondo; FR = [new Date()]; }
+  $("#paso").max = Math.max(0, FR.length - 1);
+  marcas(); verFrame(FR.length - 1);
+}
+function verFrame(i){
+  iFr = Math.max(0, Math.min(i, FR.length - 1)); $("#paso").value = iFr;
+  const ultimo = iFr === FR.length - 1;
+  $("#hframe").textContent = FR[iFr] ? fechaHora(FR[iFr]) + (ultimo ? " · última" : "") : "—";
+  const hay = fondo === "geo" || fondo === "ir" || (fondo === "b7" && D && D.b7 && D.b7.length);
+  if (hay){
+    const l = capaDe(iFr);
+    if (!mapa.hasLayer(l)) l.addTo(mapa);
+    let listo = false;
+    const mostrar = () => { if (listo) return; listo = true; l.setOpacity(1); Object.values(cache).forEach(o => { if (o !== l) o.setOpacity(0); }); visible = l; };
+    if (l instanceof L.TileLayer && l.isLoading && l.isLoading()){ l.once("load", mostrar); setTimeout(mostrar, 1500); } else mostrar();
+    if (iFr + 1 < FR.length){ const s = capaDe(iFr + 1); if (!mapa.hasLayer(s)) s.addTo(mapa); }   // precarga la siguiente
+  }
+  if (D) pintarFuego();
+}
+function marcas(){
+  if (!D || FR.length < 2){ $("#marcas").innerHTML = ""; return; }
+  const a = FR[0].getTime(), b = Date.now(), set = new Set();
+  D.focos.forEach(f => { if (f.industrial) return; const t = ms(f.t); if (t >= a && t <= b) set.add(Math.round((t - a) / (b - a) * 200)); });
+  $("#marcas").innerHTML = [...set].map(k => `<i style="left:${k / 2}%"></i>`).join("");
+}
+function pararAnim(){ if (anim){ clearInterval(anim); anim = null; $("#play").textContent = "▶"; } }
+$("#play").addEventListener("click", () => { if (anim) return pararAnim(); $("#play").textContent = "❚❚"; if (iFr >= FR.length - 1) verFrame(0);
+  anim = setInterval(() => { if (iFr >= FR.length - 1){ pararAnim(); return; } verFrame(iFr + 1); }, 650); });
+$("#paso").addEventListener("input", ev => { pararAnim(); verFrame(+ev.target.value); });
+$("#rango").addEventListener("change", () => armarFondo());
+$("#fondo").addEventListener("change", ev => { fondo = ev.target.value; armarFondo(); });
+
+/* ---------- fuego: huellas de los focos y contorno de cada incendio ---------- */
+const MEDIO_KM = f => f.fuente === "GOES-19" ? 1.25 : f.fuente.startsWith("MODIS") ? 0.5 : 0.19;
+function huella(f){
+  const h = MEDIO_KM(f), dla = h / 111, dlo = h / (111 * Math.cos(f.lat * Math.PI / 180));
+  return [[f.lat - dla, f.lon - dlo], [f.lat + dla, f.lon + dlo]];
+}
+function casco(P){                                       // contorno convexo
+  P = P.slice().sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+  const x = (o, a, b) => (a[1] - o[1]) * (b[0] - o[0]) - (a[0] - o[0]) * (b[1] - o[1]);
+  const lo = [], up = [];
+  for (const p of P){ while (lo.length >= 2 && x(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (const p of P.slice().reverse()){ while (up.length >= 2 && x(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+  return lo.slice(0, -1).concat(up.slice(0, -1));
+}
+function relevante(f){ return D.incendios.some(i => i.relevante !== false && Math.abs(i.lat - f.lat) < .08 && Math.abs(i.lon - f.lon) < .1); }
+function pintarFuego(){
+  capas.focos.clearLayers(); capas.contornos.clearLayers(); capas.ind.clearLayers();
+  const ultimo = iFr === FR.length - 1;
+  const paso = fondo === "b7" ? 10 : (PASO[$("#rango").value] || 10);
+  const tf = ultimo || !FR.length ? Date.now() : FR[iFr].getTime() + paso * 60000;
+  const t0 = FR.length > 1 ? FR[0].getTime() - 6 * 3600000 : Date.now() - 72 * 3600000;
+  const chicos = $("#cChicos").checked;
+  const vivos = D.focos.filter(f => { const t = ms(f.t); return t <= tf && t >= t0; });
+  vivos.sort((a, b) => ms(a.t) - ms(b.t)).forEach(f => {          // lo más reciente queda encima
+    if (!f.industrial && !chicos && !relevante(f)) return;
+    const m = (tf - ms(f.t)) / 60000, goes = f.fuente === "GOES-19";
+    const col = f.industrial ? "#8a94a6" : m <= 60 ? "#ff3b1f" : m <= 360 ? "#ff8c1a" : "#c0392b";
+    const r = L.rectangle(huella(f), {stroke: goes, color: col, weight: 1, dashArray: goes ? "3 3" : null, fillColor: col,
+      fillOpacity: f.industrial ? .5 : goes ? (m <= 60 ? .35 : .18) : (m <= 60 ? .9 : .7)});
+    r.bindTooltip(`${f.industrial ? "Punto caliente industrial (no es incendio) · " : ""}${f.fuente} · ${haceTxt((Date.now() - ms(f.t)) / 60000)} (${hora(f.t)})${f.frp ? " · potencia " + f.frp + " MW" : ""}`);
+    (f.industrial ? capas.ind : capas.focos).addLayer(r);
   });
-  $("#estac").innerHTML = E.length ? E.sort((a, b) => a.dist - b.dist).map((e, k) => {
-    const S = e.serie || [], u = S[S.length - 1] || [], p = S[S.length - 2] || [];
-    const d = (i, dec = 1) => u[i] != null && p[i] != null ? +(u[i] - p[i]).toFixed(dec) : null;
-    const dT = d(1), dH = d(2, 0);
-    const fl = (x, u2, inv) => x == null ? "" : `<small class="${(inv ? -x : x) > 0 ? "sube" : "baja"}">${x > 0 ? "+" : ""}${x} ${u2} en 1 h</small>`;
-    const alerta = (dT != null && dT >= 3) || (dH != null && dH <= -15);
-    return `<div class="est" data-e="${k}"><div class="t"><span>Incendio a <b style="color:var(--tx)">${e.dist} km</b> al ${e.rumbo}${e.a_sotavento ? " · <b style=\"color:#ff9f1c\">el humo va hacia la estación</b>" : ""}</span></div>
-      <b>${esc(e.nombre)}</b>
-      <div class="v"><span><b>${u[1] ?? "—"}</b> °C ${fl(dT, "°C")}</span><span><b>${u[2] ?? "—"}</b> % ${fl(dH, "%", true)}</span><span>${u[4] != null ? DIRS[Math.round(u[4] / 45) % 8] : ""} <b>${u[3] ?? "—"}</b> kt</span></div>
-      <div style="display:flex;gap:10px">${mini(S.map(x => x[1]), "#ff7a59")}${mini(S.map(x => x[2]), "#5ac8fa")}</div>
-      ${alerta ? `<small style="color:#ff9f1c">Cambio brusco en la última hora: puede ser efecto del incendio.</small>` : ""}</div>`; }).join("")
-    : `<p class="vacio">Ninguna estación automática a menos de 30 km de un incendio de las últimas 6 horas.</p>`;
-  const F = (QM && QM.features) || [];
-  F.forEach(f => L.geoJSON(f, {style: {color: "#ff7a59", weight: 1.5, fillColor: "#962814", fillOpacity: .55}})
-    .bindTooltip(`Área quemada · ${f.properties.hectareas} ha · cerca de ${esc(f.properties.localidad)} · Sentinel-2 ${f.properties.imagen_antes} → ${f.properties.imagen_despues}`).addTo(capas.quem));
-  $("#quem").innerHTML = F.length ? [...F].sort((a, b) => b.properties.ultima.localeCompare(a.properties.ultima)).map((f, k) => { const p = f.properties, sv = p.severidad || {};
-    return `<div class="qm" data-q="${F.indexOf(f)}"><b>${p.hectareas.toLocaleString("es-CL")} ha</b> · cerca de ${esc(p.localidad)}<br><small>Incendio del ${p.primera.slice(8, 10)}/${p.primera.slice(5, 7)} · severidad alta ${sv.alta ?? 0} ha · imágenes del ${p.imagen_antes} y ${p.imagen_despues}</small></div>`; }).join("")
-    : `<p class="vacio">Aún no hay áreas quemadas calculadas. Se calculan con imágenes Sentinel-2 cuando un incendio lleva al menos un día sin detecciones y hay una imagen sin nubes.</p>`;
-  if (!$("#cEst").checked) capas.est.remove(); if (!$("#cQuem").checked) capas.quem.remove();
+  D.incendios.filter(i => i.relevante !== false || chicos).forEach(i => {
+    const P = [];
+    vivos.forEach(f => { if (f.industrial || Math.abs(i.lat - f.lat) > .08 || Math.abs(i.lon - f.lon) > .1) return; const [[a, b], [c, d]] = huella(f); P.push([a, b], [a, d], [c, b], [c, d]); });
+    if (P.length < 4) return;
+    L.polygon(casco(P), {color: "#ffd23f", weight: 2, dashArray: "6 4", fill: false}).addTo(capas.contornos)
+      .bindTooltip(`🔥 ${esc(i.dist < 3 ? i.localidad : "cerca de " + i.localidad)}`, {permanent: ultimo, direction: "top", className: "etq"});
+  });
+  if ($("#cFocos").checked){ capas.focos.addTo(mapa); capas.contornos.addTo(mapa); } else { capas.focos.remove(); capas.contornos.remove(); }
+  if (humo){ humo.remove(); humo = null; }
+  if (ultimo && D.humo && $("#cHumo").checked) humo = L.imageOverlay("humo.png?t=" + ms(D.humo.t), D.humo.limites, {opacity: .8}).addTo(mapa);
 }
+
+/* ---------- datos ---------- */
 async function cargar(){
-  cargarExtra();
+  try { const r = await fetch("quemadas.geojson?t=" + Date.now(), {cache: "no-store"}); QM = r.ok ? await r.json() : null; } catch (e) { QM = null; }
   try { const r = await fetch("data.json?t=" + Date.now(), {cache: "no-store"}); if (!r.ok) throw 0; D = await r.json(); } catch (e) { $("#act").textContent = "Sin datos todavía"; return; }
   if (!$("#comuna").options.length){
     Object.keys(D.coords).sort((a, b) => a.localeCompare(b, "es")).forEach(n => $("#comuna").add(new Option(n, n)));
     $("#comuna").value = leer("comuna") && D.coords[leer("comuna")] ? leer("comuna") : "Machalí";
-  }
-  pintar();
+    armarFondo();
+  } else if (!anim && iFr === FR.length - 1) armarFondo(); else { marcas(); pintarFuego(); }
+  pintarPanel();
 }
-function pintar(){
-  $("#act").textContent = `Actualizado ${hora(D.generado)} · imagen GOES-19 de las ${hora(D.goes)}` + (D.estado && D.estado.firms === "sin clave" ? "" : "");
-  pintarFocos();
-  // incendios
-  capas.inc.clearLayers();
-  D.incendios.forEach(i => { if (i.edad_min > 1440 || (!i.relevante && !$("#cChicos").checked)) return;
-    L.marker([i.lat, i.lon], {opacity: 0}).bindTooltip(`🔥 ${esc(i.dist < 3 ? i.localidad : "cerca de " + i.localidad)}`, {permanent: true, direction: "top", className: "etq"}).addTo(capas.inc); });
-  // humo
-  if (humo){ humo.remove(); humo = null; }
-  if (D.humo && $("#cHumo").checked) humo = L.imageOverlay("humo.png?t=" + Date.parse(D.humo.t.replace("Z", ":00Z")), D.humo.limites, {opacity: .85}).addTo(mapa);
-  // viento
+function pintarPanel(){
+  $("#act").textContent = `Actualizado ${hora(D.generado)} · último barrido GOES-19 ${hora(D.goes)}`;
+  const c = $("#comuna").value, e = (D.localidades || {})[c], n = e ? e.nivel : 0;
+  $("#estado").className = "estado n" + n;
+  $("#estado").innerHTML = `<b>${["Sin incendios cerca", "Incendio en la zona", "Incendio cercano"][n]}</b><span>${esc(e ? e.texto : "")}</span>`;
+  const chicos = $("#cChicos").checked;
+  const L2 = D.incendios.filter(i => i.edad_min <= 4320 && (i.relevante !== false || chicos));
+  const nCh = D.incendios.filter(i => i.edad_min <= 4320 && i.relevante === false).length;
+  const col = m => m <= 60 ? "#ff3b1f" : m <= 360 ? "#ff8c1a" : "#c0392b";
+  $("#lista").innerHTML = (L2.length ? L2.map(i => `<div class="inc" data-k="${D.incendios.indexOf(i)}" style="--c:${col(i.edad_min)}"><div class="t"><span>${i.edad_min <= 60 ? "activo" : "última detección " + haceTxt(i.edad_min)} · ${i.focos} detecciones</span><span>${i.tendencia}</span></div><p>${esc(i.texto)}</p></div>`).join("")
+    : `<p class="vacio">Sin incendios relevantes en las últimas 72 horas en la zona central.</p>`)
+    + (nCh && !chicos ? `<p class="vacio">Hay ${nCh} focos pequeños (quemas agrícolas u otros fuegos menores) ocultos; se ven con «Focos pequeños».</p>` : "");
+  capas.quem.clearLayers();
+  const F = (QM && QM.features) || [];
+  F.forEach(f => L.geoJSON(f, {style: {color: "#ff7a59", weight: 1.5, fillColor: "#962814", fillOpacity: .5}})
+    .bindTooltip(`Área quemada · ${f.properties.hectareas} ha · cerca de ${esc(f.properties.localidad)} · Sentinel-2 ${f.properties.imagen_antes} → ${f.properties.imagen_despues}`).addTo(capas.quem));
+  if (!$("#cQuem").checked) capas.quem.remove();
+  $("#quem").innerHTML = F.length ? F.map((f, k) => { const p = f.properties, sv = p.severidad || {};
+    return `<div class="qm" data-q="${k}"><b>${p.hectareas.toLocaleString("es-CL")} ha</b> · cerca de ${esc(p.localidad)}<br><small>Incendio del ${p.primera.slice(8, 10)}/${p.primera.slice(5, 7)} · severidad alta ${sv.alta ?? 0} ha · imágenes ${p.imagen_antes} y ${p.imagen_despues}</small></div>`; }).join("")
+    : `<p class="vacio">Se calculan con imágenes Sentinel-2 cuando un incendio lleva un día sin detecciones y hay una imagen sin nubes.</p>`;
   capas.viento.clearLayers();
   (D.viento || []).forEach(([la, lo, dir, vel]) => {
     const ic = L.divIcon({className: "", html: `<div class="flecha" style="transform:rotate(${(dir + 180) % 360}deg)" title="${Math.round(vel)} km/h">↑</div>`, iconSize: [16, 16]});
     L.marker([la, lo], {icon: ic, interactive: false}).addTo(capas.viento);
   });
-  // comuna
-  const c = $("#comuna").value, e = (D.localidades || {})[c];
-  const n = e ? e.nivel : 0;
-  $("#estado").className = "estado n" + n;
-  $("#estado").innerHTML = `<b>${["Sin incendios cerca", "Incendio en la zona", "Incendio cercano"][n]}</b><span>${esc(e ? e.texto : "")}</span>`;
-  // lista
-  const L2 = D.incendios.filter(i => i.edad_min <= 1440 && (i.relevante !== false || $("#cChicos").checked));
-  const nChicos = D.incendios.filter(i => i.edad_min <= 1440 && i.relevante === false).length;
-  $("#lista").innerHTML = (L2.length ? L2.map(i => `<div class="inc" data-k="${D.incendios.indexOf(i)}" style="--c:${colEdad(i.edad_min)}"><div class="t"><span>${haceTxt(i.edad_min)} · ${i.focos} detecciones</span><span>${i.tendencia}</span></div><p>${esc(i.texto)}</p></div>`).join("")
-    : `<p class="vacio">No hay incendios relevantes detectados en las últimas 24 horas en la zona central.</p>`)
-    + (nChicos && !$("#cChicos").checked ? `<p class="vacio">Además hay ${nChicos} focos pequeños (quemas agrícolas u otros fuegos menores), ocultos. Actívelos con «Focos pequeños».</p>` : "");
 }
-function relevanteFoco(f){
-  return D.incendios.some(i => i.relevante !== false && Math.abs(i.lat - f.lat) < .08 && Math.abs(i.lon - f.lon) < .1);
-}
-function pintarFocos(){
-  capas.focos.clearLayers(); capas.ind.clearLayers();
-  const tf = FR[iFr] && fondo !== "esri" ? FR[iFr].getTime() + 10 * 60000 : Date.now();
-  const chicos = $("#cChicos").checked;
-  D.focos.forEach(f => {
-    const tt = Date.parse(f.t.replace("Z", ":00Z"));
-    if (tt > tf) return;                                         // al animar, solo lo detectado hasta ese cuadro
-    if (!f.industrial && !chicos && !relevanteFoco(f)) return;
-    const m = (tf - tt) / 60000, viirs = f.fuente !== "GOES-19";
-    const mk = L.circleMarker([f.lat, f.lon], {radius: viirs ? 4 : 6, color: f.industrial ? "#555" : "#fff", weight: viirs ? 1 : 1.5,
-      fillColor: f.industrial ? "#8a94a6" : colEdad(m), fillOpacity: .95});
-    mk.bindTooltip(`${f.industrial ? "Punto caliente industrial · " : ""}${f.fuente} · ${haceTxt(m)} (${hora(f.t)})${f.frp ? " · potencia " + f.frp + " MW" : ""} · confianza ${f.conf}`);
-    (f.industrial ? capas.ind : capas.focos).addLayer(mk);
-  });
-}
-document.addEventListener("click", ev => { const x = ev.target.closest(".inc"); if (x){ const i = D.incendios[+x.dataset.k]; mapa.setView([i.lat, i.lon], 11); } });
-$("#comuna").addEventListener("change", () => { guardar("comuna", $("#comuna").value); const p = D.coords[$("#comuna").value]; if (p) mapa.setView(p, 10); pintar(); });
-$("#cHumo").addEventListener("change", () => D && pintar());
+document.addEventListener("click", ev => {
+  const x = ev.target.closest(".inc"); if (x){ const i = D.incendios[+x.dataset.k]; mapa.setView([i.lat, i.lon], 11); }
+  const q = ev.target.closest(".qm"); if (q && QM){ mapa.fitBounds(L.geoJSON(QM.features[+q.dataset.q]).getBounds(), {maxZoom: 13}); }
+});
+$("#comuna").addEventListener("change", () => { guardar("comuna", $("#comuna").value); const p = D.coords[$("#comuna").value]; if (p) mapa.setView(p, 10); pintarPanel(); });
+$("#cFocos").addEventListener("change", () => D && pintarFuego());
+$("#cHumo").addEventListener("change", () => D && pintarFuego());
+$("#cChicos").addEventListener("change", () => { if (D){ pintarFuego(); pintarPanel(); } });
 $("#cViento").addEventListener("change", ev => ev.target.checked ? capas.viento.addTo(mapa) : capas.viento.remove());
-$("#cEst").addEventListener("change", ev => ev.target.checked ? capas.est.addTo(mapa) : capas.est.remove());
 $("#cQuem").addEventListener("change", ev => ev.target.checked ? capas.quem.addTo(mapa) : capas.quem.remove());
-document.addEventListener("click", ev => { const e = ev.target.closest(".est"); if (e && EST){ const x = EST.estaciones[+e.dataset.e]; mapa.setView([x.lat, x.lon], 11); }
-  const q = ev.target.closest(".qm"); if (q && QM){ mapa.fitBounds(L.geoJSON(QM.features[+q.dataset.q]).getBounds(), {maxZoom: 13}); } });
-$("#cChicos").addEventListener("change", () => D && pintar());
 $("#cInd").addEventListener("change", ev => ev.target.checked ? capas.ind.addTo(mapa) : capas.ind.remove());
 cargar(); setInterval(cargar, 5 * 60 * 1000);
 </script>

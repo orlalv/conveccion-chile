@@ -20,7 +20,8 @@ import requests
 from PIL import Image
 
 LAT_S, LAT_N, LON_O, LON_E = -38.0, -32.0, -74.0, -69.8
-HORAS = 24                      # focos que se muestran
+HORAS = 72                      # focos que se guardan (la página anima hasta 72 h)
+B7_CUADROS = 36                 # imágenes de banda 7 que se guardan (6 h)
 DIAS_PERSIST = 7                # historial para detectar puntos industriales
 CODIGOS = {10: "alta", 11: "alta", 30: "alta", 31: "alta", 13: "alta", 33: "alta",
            12: "media", 32: "media", 14: "media", 34: "media", 15: "baja", 35: "baja"}
@@ -160,13 +161,77 @@ def humo_goes(contenido, Geo, salida):
     return {"img": "humo.png", "limites": [[LAT_S, LON_O], [LAT_N, LON_E]], "pixeles": int(m.sum())}
 
 
+# ------------------------------------------------------------------ 2b. banda 7 (3,9 µm): el fuego como punto caliente
+def paleta_b7(tb):
+    """Gris para el paisaje (frío = claro, como el infrarrojo habitual) y amarillo→rojo→blanco para lo muy caliente."""
+    img = np.zeros(tb.shape + (4,), "u1")
+    ok = np.isfinite(tb)
+    g = np.clip((330 - tb) / (330 - 200), 0, 1)                    # 200 K blanco, 330 K negro
+    v = (40 + 200 * g).astype("u1")
+    img[..., 0] = img[..., 1] = img[..., 2] = v
+    img[..., 3] = np.where(ok, 255, 0)
+    cal = ok & (tb >= 320)
+    k = np.clip((tb - 320) / 60, 0, 1)                             # 320 K amarillo, 350 K rojo, 380+ K blanco
+    rr = np.full(tb.shape, 255.0); gg = np.where(k < .5, 230 - 380 * k, 40 + 430 * (k - .5)); bb = np.where(k < .5, 40, 40 + 430 * (k - .5))
+    img[cal, 0] = rr[cal]; img[cal, 1] = np.clip(gg[cal], 0, 255); img[cal, 2] = np.clip(bb[cal], 0, 255)
+    return img
+
+
+def banda7(contenido, Geo, ruta):
+    import netCDF4
+    ds = netCDF4.Dataset("c07.nc", memory=contenido)
+    LO, LA = grilla_zona(560)
+    pr = ds.variables["goes_imager_projection"]
+    geo = Geo(pr.perspective_point_height + pr.semi_major_axis, pr.semi_major_axis, pr.semi_minor_axis, pr.longitude_of_projection_origin)
+    sx, sy = geo.scan(LA.ravel(), LO.ravel())
+    xs = ds.variables["x"][:].astype("f8"); ys = ds.variables["y"][:].astype("f8")
+    ix = np.rint((sx - xs[0]) / (xs[1] - xs[0])); iy = np.rint((sy - ys[0]) / (ys[1] - ys[0]))
+    ok = np.isfinite(ix) & np.isfinite(iy) & (ix >= 0) & (ix < xs.size) & (iy >= 0) & (iy < ys.size)
+    i0, i1, j0, j1 = int(ix[ok].min()), int(ix[ok].max()) + 1, int(iy[ok].min()), int(iy[ok].max()) + 1
+    W = np.ma.filled(ds.variables["CMI"][j0:j1, i0:i1].astype("f4"), np.nan)
+    v = np.full(LA.size, np.nan, "f4")
+    v[ok] = W[(iy[ok] - j0).astype(int), (ix[ok] - i0).astype(int)]
+    ds.close()
+    Image.fromarray(paleta_b7(v.reshape(LA.shape)), "RGBA").save(ruta, optimize=True)
+
+
+def cuadros_b7(t, prev, dir_inc, sitio_url, Geo, archivos, bajar):
+    """Agrega la banda 7 de la imagen t y recupera las anteriores publicadas (las últimas 6 h)."""
+    d7 = os.path.join(dir_inc, "b7"); os.makedirs(d7, exist_ok=True)
+    lista = list(prev.get("b7", []))
+    try:
+        cand = archivos("ABI-L2-CMIPF", "M6C07_G19", t - timedelta(minutes=12), t + timedelta(minutes=1))
+        if cand:
+            tf, k = cand[-1]
+            ts = tf.strftime("%Y%m%d%H%M")
+            if ts not in lista:
+                banda7(bajar(k), Geo, os.path.join(d7, ts + ".png"))
+                lista.append(ts)
+    except Exception as ex:
+        print("  incendios: banda 7 falló:", ex)
+    lista = sorted(set(lista))[-B7_CUADROS:]
+    quedan = []
+    for ts in lista:                                  # el sitio se arma de cero: se traen las publicadas antes
+        p = os.path.join(d7, ts + ".png")
+        if not os.path.exists(p) and sitio_url:
+            try:
+                rr = requests.get(f"{sitio_url.rstrip('/')}/incendios/b7/{ts}.png", timeout=30)
+                if rr.ok:
+                    open(p, "wb").write(rr.content)
+            except Exception:
+                pass
+        if os.path.exists(p):
+            quedan.append(ts)
+    return quedan
+
+
 # ------------------------------------------------------------------ 3. FIRMS
 def focos_firms(clave):
     if not clave:
         return None
     out = []
     for fuente in ("VIIRS_SNPP_NRT", "VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT", "MODIS_NRT"):
-        u = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{clave}/{fuente}/{LON_O},{LAT_S},{LON_E},{LAT_N}/2"
+        u = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{clave}/{fuente}/{LON_O},{LAT_S},{LON_E},{LAT_N}/4"
         try:
             r = requests.get(u, timeout=60); r.raise_for_status()
             filas = [l.split(",") for l in r.text.strip().splitlines()]
@@ -342,7 +407,7 @@ def actualizar(t, salida_site, sitio_url, Geo, archivos, bajar, prev=None):
     fijos = persistentes(hist)
 
     # FIRMS
-    firms = focos_firms(os.environ.get("FIRMS_KEY", "").strip())   # 2 días: con 1 día, al pasar las 00 UTC queda vacío
+    firms = focos_firms(os.environ.get("FIRMS_KEY", "").strip())   # 4 días UTC para cubrir 72 h (con 1 día se vacía a las 00 UTC)
     if firms is not None:
         firms = [f for f in firms if f["t"] >= limite]
     if firms is None:
@@ -378,6 +443,7 @@ def actualizar(t, salida_site, sitio_url, Geo, archivos, bajar, prev=None):
         except Exception:
             humo = None
 
+    b7 = cuadros_b7(t, prev, dir_inc, sitio_url, Geo, archivos, bajar)
     V = viento() or prev.get("viento", [])
     inc = agrupar(todos, ahora, V)
     temporada = prev.get("temporada", [])
@@ -389,7 +455,7 @@ def actualizar(t, salida_site, sitio_url, Geo, archivos, bajar, prev=None):
         print("  incendios: áreas quemadas falló:", ex)
     js = dict(generado=ahora.strftime("%Y-%m-%dT%H:%MZ"), goes=t.strftime("%Y-%m-%dT%H:%MZ"), zona=[[LAT_S, LON_O], [LAT_N, LON_E]],
               estado=estado, focos=todos, incendios=inc, humo=humo, viento=V, localidades=estado_localidades(inc),
-              coords={n: [a, b] for n, a, b in LOCALIDADES}, industriales=INDUSTRIALES, historial=hist, temporada=temporada)
+              coords={n: [a, b] for n, a, b in LOCALIDADES}, industriales=INDUSTRIALES, historial=hist, temporada=temporada, b7=b7, zona_img=[[LAT_S, LON_O], [LAT_N, LON_E]])
     json.dump(js, open(os.path.join(dir_inc, "data.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     print(f"  incendios: {len(inc)} incendios activos/recientes, {sum(f['industrial'] for f in todos)} puntos industriales descartados")
     return js
@@ -402,6 +468,15 @@ def mantener(salida_site, sitio_url):
     prev = cargar_previo(dir_inc, sitio_url)
     if prev:
         json.dump(prev, open(os.path.join(dir_inc, "data.json"), "w"), ensure_ascii=False, separators=(",", ":"))
+        for ts in prev.get("b7", []):
+            p = os.path.join(dir_inc, "b7", ts + ".png"); os.makedirs(os.path.dirname(p), exist_ok=True)
+            if sitio_url and not os.path.exists(p):
+                try:
+                    r = requests.get(f"{sitio_url.rstrip('/')}/incendios/b7/{ts}.png", timeout=30)
+                    if r.ok:
+                        open(p, "wb").write(r.content)
+                except Exception:
+                    pass
         for nombre in ("humo.png", "quemadas.geojson"):
             if sitio_url and not os.path.exists(os.path.join(dir_inc, nombre)):
                 try:
