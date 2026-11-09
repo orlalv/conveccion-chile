@@ -166,7 +166,7 @@ def focos_firms(clave):
         return None
     out = []
     for fuente in ("VIIRS_SNPP_NRT", "VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT", "MODIS_NRT"):
-        u = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{clave}/{fuente}/{LON_O},{LAT_S},{LON_E},{LAT_N}/1"
+        u = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{clave}/{fuente}/{LON_O},{LAT_S},{LON_E},{LAT_N}/2"
         try:
             r = requests.get(u, timeout=60); r.raise_for_status()
             filas = [l.split(",") for l in r.text.strip().splitlines()]
@@ -342,7 +342,9 @@ def actualizar(t, salida_site, sitio_url, Geo, archivos, bajar, prev=None):
     fijos = persistentes(hist)
 
     # FIRMS
-    firms = focos_firms(os.environ.get("FIRMS_KEY", "").strip())
+    firms = focos_firms(os.environ.get("FIRMS_KEY", "").strip())   # 2 días: con 1 día, al pasar las 00 UTC queda vacío
+    if firms is not None:
+        firms = [f for f in firms if f["t"] >= limite]
     if firms is None:
         firms = [f for f in prev.get("focos", []) if f["fuente"] != "GOES-19" and f["t"] >= limite]
         estado["firms"] = "sin clave" if not os.environ.get("FIRMS_KEY") else "sin datos"
