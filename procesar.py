@@ -23,6 +23,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 import sat_estaciones as SE
 import incendios as IN
+import niebla as NB
 import requests
 from PIL import Image
 from scipy import ndimage
@@ -665,6 +666,7 @@ def main():
             print("Sin imagen nueva; se mantiene la publicación anterior.")
             SE.guardar(a.salida, sat)
             IN.mantener(os.path.dirname(a.salida.rstrip("/")), a.sitio_url)
+            NB.mantener(os.path.dirname(a.salida.rstrip("/")), a.sitio_url)
             json.dump(prev, open(os.path.join(a.salida, "index.json"), "w"), ensure_ascii=False, separators=(",", ":"))
             return
         print("Imagen:", clave)
@@ -681,6 +683,10 @@ def main():
             IN.actualizar(t, os.path.dirname(a.salida.rstrip("/")), a.sitio_url, Geo, archivos, bajar)
         except Exception as ex:
             print("  aviso: incendios falló:", ex)
+        try:                                   # niebla y nubes bajas de noche (bandas 13 − 7)
+            NB.actualizar(t, c13, os.path.dirname(a.salida.rstrip("/")), a.sitio_url, Geo)
+        except Exception as ex:
+            print("  aviso: niebla falló:", ex)
 
     json.dump(prev, open(os.path.join(a.salida, "index.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     ult = prev["frames"][-1]["celdas"]

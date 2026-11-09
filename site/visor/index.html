@@ -89,6 +89,11 @@ const PROD = [
   sirve: "Seguir nubes de día y de noche, ver qué tan altas son y detectar tormentas: un tope muy frío y en colores es una nube muy alta, como un cumulonimbo.",
   ojo: "La niebla y las nubes muy bajas casi no se ven, porque tienen la misma temperatura que el suelo.",
   ley: [["#2a2a2a", [42, 42, 42], "Superficie o nubes muy bajas (cálidas)"], ["#8c8c8c", [140, 140, 140], "Nubes bajas a medias"], ["#e6e6e6", [230, 230, 230], "Nubes altas y frías"], ["#2f6fe0", [47, 111, 224], "Topes muy fríos (−40 °C o menos)"], ["#2fb04a", [47, 176, 74], "Topes muy fríos: nube de gran desarrollo"], ["#e8e030", [232, 224, 48], "Topes extremadamente fríos: posible tormenta"], ["#e02020", [224, 32, 32], "Topes más fríos aún: cumulonimbo intenso"]]},
+ {k: "niebla", propio: true, nom: "Niebla y nubes bajas (noche)", sub: "La camanchaca de noche; producto propio", mues: "linear-gradient(135deg,#0b1424,#7fd0ff 55%,#fff)",
+  que: "Producto de METOTEC con el GOES-19: de noche, las gotitas de agua de la niebla y los estratos se ven distintas en dos bandas infrarrojas (13 y 7). La diferencia entre ambas marca la niebla en celeste; más blanco = más espesa.",
+  sirve: "Ver la camanchaca en la costa y la niebla de los valles durante la noche, cuando las otras imágenes casi no la muestran.",
+  ojo: "Solo funciona de noche: de día queda transparente. Bajo nubes altas no se ve la niebla.",
+  ley: [["#ffffff", [255, 255, 255], "Niebla o estratos espesos"], ["#a8dcff", [168, 220, 255], "Niebla o nubes bajas delgadas"], ["#1d2a3a", [29, 42, 58], "Sin niebla (despejado, nubes altas o de día)"]]},
  {k: "fuego", capa: "GOES-East_ABI_FireTemp", nom: "Fuego", sub: "Incendios en rojo, amarillo o blanco", mues: "linear-gradient(135deg,#1b0b2e,#d01818 45%,#ffb000 70%,#fff)",
   que: "Combinación de tres bandas infrarrojas (3,9; 2,2 y 1,6 µm) hecha para resaltar el fuego. Un incendio aparece rojo si es pequeño o tibio, naranja o amarillo si es más intenso y blanco si es muy intenso.",
   sirve: "Ver incendios activos, de día y de noche, y cómo crecen de una imagen a otra.",
@@ -118,6 +123,8 @@ const mapa = L.map("mapa", {zoomControl: true}).setView([-35.5, -71.5], 5);
 mapa.createPane("sat"); mapa.getPane("sat").style.zIndex = 250;
 mapa.createPane("ref"); mapa.getPane("ref").style.zIndex = 450; mapa.getPane("ref").style.pointerEvents = "none";
 L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {pane: "ref", maxZoom: 12, opacity: .8, attribution: "Límites © Esri"}).addTo(mapa);
+const gris = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {maxZoom: 12, attribution: "© Esri"});
+let NB = null;
 const PLANT = []; ["best", "nrt", "all"].forEach(ep => [7, 8, 6, 9].forEach(n => ["png", "jpg"].forEach(f => PLANT.push([`GoogleMapsCompatible_Level${n}`, f, ep]))));
 const conf = {"GOES-East_ABI_GeoColor": ["GoogleMapsCompatible_Level7", "png", "best"], "GOES-East_ABI_Band2_Red_Visible_1km": ["GoogleMapsCompatible_Level7", "png", "best"],
   "GOES-East_ABI_Band13_Clean_Infrared": ["GoogleMapsCompatible_Level6", "png", "best"], "GOES-East_ABI_FireTemp": ["GoogleMapsCompatible_Level7", "png", "best"],
@@ -139,6 +146,7 @@ function probar(capa){
 const url = (c, capa, d) => `https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${capa}/default/${iso(d)}/${c[0]}/{z}/{y}/{x}.${c[1]}`;
 function capaDe(i){
   const k = P.k + iso(FR[i]); if (cache[k]) return cache[k];
+  if (P.propio) return cache[k] = L.imageOverlay(`../niebla/${NB.cuadros[i]}.png`, NB.limites, {opacity: 0, pane: "sat"});
   const c = conf[P.capa], mz = +c[0].match(/Level(\d+)/)[1];
   return cache[k] = L.tileLayer(url(c, P.capa, FR[i]), {maxNativeZoom: mz, maxZoom: 12, opacity: 0, pane: "sat", crossOrigin: "anonymous", attribution: "GOES-19 · NOAA / NASA GIBS"});
 }
@@ -146,6 +154,17 @@ async function armar(){
   pararAnim();
   Object.values(cache).forEach(l => l.remove()); Object.keys(cache).forEach(k => delete cache[k]);
   info();
+  gris.remove();
+  if (P.propio){
+    gris.addTo(mapa);
+    try { const r = await fetch("../niebla/lista.json?t=" + Date.now(), {cache: "no-store"}); NB = r.ok ? await r.json() : null; } catch (e) { NB = null; }
+    if (!NB || !NB.cuadros.length){ $("#hframe").textContent = "Sin imágenes todavía"; $("#pista").textContent = "La niebla nocturna se genera cada 10 minutos; vuelva en un rato."; return; }
+    $("#pista").textContent = "Haga clic en el mapa: le digo qué está viendo";
+    $("#rango").disabled = true;
+    FR = NB.cuadros.map(ts => new Date(Date.UTC(+ts.slice(0, 4), +ts.slice(4, 6) - 1, +ts.slice(6, 8), +ts.slice(8, 10), +ts.slice(10, 12))));
+    $("#paso").max = FR.length - 1; ver(FR.length - 1); return;
+  }
+  $("#rango").disabled = false;
   const c = await probar(P.capa);
   if (!c){ $("#hframe").textContent = "Imagen no disponible"; $("#pista").textContent = "NASA no entregó esta imagen ahora; pruebe otra o más tarde."; return; }
   $("#pista").textContent = "Haga clic en el mapa: le digo qué está viendo";
@@ -157,7 +176,7 @@ function ver(i){
   const l = capaDe(i); if (!mapa.hasLayer(l)) l.addTo(mapa);
   let hecho = false;
   const mostrar = () => { if (hecho) return; hecho = true; l.setOpacity(1); Object.values(cache).forEach(o => { if (o !== l) o.setOpacity(0); }); };
-  if (l.isLoading && l.isLoading()){ l.once("load", mostrar); setTimeout(mostrar, 1500); } else mostrar();
+  if (l.isLoading && l.isLoading && l.isLoading()){ l.once("load", mostrar); setTimeout(mostrar, 1500); } else mostrar();
   if (i + 1 < FR.length){ const s = capaDe(i + 1); if (!mapa.hasLayer(s)) s.addTo(mapa); }
 }
 function pararAnim(){ if (anim){ clearInterval(anim); anim = null; $("#play").textContent = "▶"; } }
@@ -171,6 +190,20 @@ let marca = null;
 mapa.on("click", async ev => {
   if (marca) marca.remove();
   marca = L.circleMarker(ev.latlng, {radius: 7, color: "#C9A54C", weight: 3, fill: false}).addTo(mapa);
+  if (P.propio){
+    if (!NB) return;
+    try {
+      const im = new Image(); await new Promise((ok, no) => { im.onload = ok; im.onerror = no; im.src = `../niebla/${NB.cuadros[iFr]}.png`; });
+      const [[s0, o0], [n0, e0]] = NB.limites, my = la => Math.log(Math.tan(Math.PI / 4 + la * Math.PI / 360));
+      const x = (ev.latlng.lng - o0) / (e0 - o0) * im.width, y = (my(n0) - my(ev.latlng.lat)) / (my(n0) - my(s0)) * im.height;
+      if (x < 0 || y < 0 || x >= im.width || y >= im.height){ $("#que").innerHTML = `<h3>¿Qué estoy viendo?</h3><p class="mu">Ese punto está fuera de la zona del producto (Chile continental).</p>`; return; }
+      const cv = document.createElement("canvas"); cv.width = im.width; cv.height = im.height; const cx = cv.getContext("2d"); cx.drawImage(im, 0, 0);
+      const d = cx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
+      const txt = d[3] < 40 ? "Sin niebla ni nubes bajas detectadas (o es de día, o hay nubes altas encima)" : d[3] > 190 ? "Niebla o estratos espesos" : "Niebla o nubes bajas delgadas";
+      $("#que").innerHTML = `<h3>¿Qué estoy viendo?</h3><p><b>${txt}</b></p><p class="mu">Niebla nocturna · ${FR[iFr].toLocaleTimeString("es-CL", {hour: "2-digit", minute: "2-digit"})} · ${ev.latlng.lat.toFixed(2)}°, ${ev.latlng.lng.toFixed(2)}°</p>`;
+    } catch (e) { $("#que").innerHTML = `<h3>¿Qué estoy viendo?</h3><p class="mu">No se pudo leer la imagen en ese punto.</p>`; }
+    return;
+  }
   const c = conf[P.capa]; if (!c){ return; }
   const mz = +c[0].match(/Level(\d+)/)[1], z = Math.min(mapa.getZoom(), mz);
   const pt = mapa.project(ev.latlng, z), tx = Math.floor(pt.x / 256), ty = Math.floor(pt.y / 256);

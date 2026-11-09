@@ -21,7 +21,8 @@ from PIL import Image
 
 LAT_S, LAT_N, LON_O, LON_E = -38.0, -32.0, -74.0, -69.8
 HORAS = 72                      # focos que se guardan (la página anima hasta 72 h)
-B7_CUADROS = 36                 # imágenes de banda 7 que se guardan (6 h)
+B7_CUADROS = 36
+ULTIMO_C07 = None                 # imágenes de banda 7 que se guardan (6 h)
 DIAS_PERSIST = 7                # historial para detectar puntos industriales
 CODIGOS = {10: "alta", 11: "alta", 30: "alta", 31: "alta", 13: "alta", 33: "alta",
            12: "media", 32: "media", 14: "media", 34: "media", 15: "baja", 35: "baja"}
@@ -209,8 +210,10 @@ def cuadros_b7(t, prev, dir_inc, sitio_url, Geo, archivos, bajar):
         if cand:
             tf, k = cand[-1]
             ts = tf.strftime("%Y%m%d%H%M")
+            global ULTIMO_C07
+            ULTIMO_C07 = (tf, bajar(k))                 # lo reutiliza el producto de niebla nocturna
             if ts not in lista:
-                banda7(bajar(k), Geo, os.path.join(d7, ts + ".png"))
+                banda7(ULTIMO_C07[1], Geo, os.path.join(d7, ts + ".png"))
                 lista.append(ts)
     except Exception as ex:
         print("  incendios: banda 7 falló:", ex)
