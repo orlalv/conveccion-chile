@@ -15,11 +15,11 @@ jobs:
           const {chromium}=require('playwright');
           (async()=>{const b=await chromium.launch();
           const P=[['visor_geo','https://satelite.metotec.cl/visor/',null],['visor_ir','https://satelite.metotec.cl/visor/','.p[data-k=ir]'],['visor_fuego','https://satelite.metotec.cl/visor/','.p[data-k=fuego]'],['visor_niebla','https://satelite.metotec.cl/visor/','.p[data-k=niebla]'],['visor_hd','https://satelite.metotec.cl/visor/','.p[data-k=hd]'],
-                   ['incendios','https://satelite.metotec.cl/incendios/',null],['incendios_b7','https://satelite.metotec.cl/incendios/','#fondo=b7'],['estaciones','https://satelite.metotec.cl/incendios/estaciones.html','#radio=30'],['portada','https://metotec.cl/',null],['conveccion','https://satelite.metotec.cl/',null]];
+                   ['incendios','https://satelite.metotec.cl/incendios/',null],['incendios_b7','https://satelite.metotec.cl/incendios/','#fondo|b7'],['estaciones','https://satelite.metotec.cl/incendios/estaciones.html','#radio|30'],['portada','https://metotec.cl/',null],['conveccion','https://satelite.metotec.cl/',null]];
           for (const [n,u,acc] of P){ const p=await b.newPage({viewport:{width:1400,height:850}}); const errs=[];
             p.on('pageerror',e=>errs.push(e.message)); p.on('console',m=>{if(m.type()==='error')errs.push(m.text())});
             try{ await p.goto(u,{waitUntil:'networkidle',timeout:60000}); await p.waitForTimeout(4000);
-              if(acc){ if(acc.includes('=')){const [s,v]=acc.split('=');await p.selectOption(s,v);} else await p.click(acc); await p.waitForTimeout(6000);}
+              if(acc){ if(acc.includes('|')){const [s,v]=acc.split('|');await p.selectOption(s,v);} else await p.click(acc); await p.waitForTimeout(6000);}
               await p.screenshot({path:n+'.png'}); }catch(e){errs.push('FALLO '+e.message)}
             console.log(n, errs.length?errs.slice(0,5).join(' | '):'sin errores'); await p.close(); }
           await b.close();})();
