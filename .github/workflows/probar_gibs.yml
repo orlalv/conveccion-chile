@@ -1,0 +1,19 @@
+name: Probar GIBS
+on: workflow_dispatch
+jobs:
+  probar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probar capas GOES-East en NASA GIBS
+        run: |
+          T=$(date -u -d '-90 min' +%Y-%m-%dT%H:%M:00Z | sed 's/:[0-9]\(:00Z\)$/0\1/')
+          T=$(date -u -d "@$(( ($(date -u +%s) - 5400) / 600 * 600 ))" +%Y-%m-%dT%H:%M:%SZ)
+          echo "tiempo $T"
+          for capa in GOES-East_ABI_GeoColor GOES-East_ABI_Band2_Red_Visible_1km GOES-East_ABI_Band13_Clean_Infrared GOES-East_ABI_FireTemp GOES-East_ABI_Dust GOES-East_ABI_Air_Mass; do
+            for ep in best nrt; do for n in 6 7 8 9; do for f in png jpg; do
+              u="https://gibs.earthdata.nasa.gov/wmts/epsg3857/$ep/$capa/default/$T/GoogleMapsCompatible_Level$n/4/9/4.$f"
+              c=$(curl -s -o /tmp/t -w "%{http_code} %{content_type} %{size_download}" -H "Origin: https://satelite.metotec.cl" -D /tmp/h "$u")
+              case "$c" in 200*image*) echo "OK $capa $ep L$n $f -> $c | $(grep -i access-control-allow-origin /tmp/h | tr -d '\r')";; esac
+            done; done; done
+          done
+          echo listo

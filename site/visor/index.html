@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Visor satelital · METOTEC</title>
+<meta name="description" content="Imágenes del satélite GOES-19 sobre Chile explicadas en español: color real, nubes, niebla, fuego, polvo y masas de aire.">
+<link rel="icon" href="../incendios/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{--noche:#0A1F44;--oro:#C9A54C;--tx:#e8edf5;--mu:#9fb0c8;--bd:#22365e;--panel:#0f1c3a}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font:15px/1.45 Inter,system-ui,"Segoe UI",Roboto,Arial,sans-serif;background:#0b1424;color:var(--tx);display:flex;flex-direction:column}
+header{background:radial-gradient(900px 300px at 85% 0%,#163a73 0%,var(--noche) 62%);border-bottom:3px solid var(--oro);padding:10px 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header img{height:28px}
+header h1{margin:0;font-size:17px}header h1 small{display:block;color:var(--mu);font-weight:500;font-size:12.5px}
+header nav{display:flex;gap:6px;margin-left:auto}
+header nav a{color:var(--tx);text-decoration:none;font-size:13px;font-weight:600;border:1px solid var(--bd);border-radius:999px;padding:5px 12px}
+header nav a.on{background:var(--oro);color:var(--noche);border-color:var(--oro)}
+main{flex:1;display:grid;grid-template-columns:300px 1fr 340px;min-height:0}
+#prod{border-right:1px solid var(--bd);overflow:auto;padding:12px;display:grid;gap:8px;align-content:start}
+#prod h2,aside h2{font-size:12.5px;margin:4px 0;color:var(--mu);text-transform:uppercase;letter-spacing:.08em}
+.p{display:grid;grid-template-columns:38px 1fr;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:9px 10px;cursor:pointer;text-align:left;color:var(--tx);font:inherit}
+.p:hover{background:#16264a}.p.on{border-color:var(--oro);background:#17264a}
+.p i{width:38px;height:38px;border-radius:8px;display:block}
+.p b{display:block;font-size:14.5px}.p small{color:var(--mu);font-size:12.5px;line-height:1.3;display:block}
+#mapwrap{position:relative;min-height:320px}#mapa{position:absolute;inset:0;background:#0d1418;cursor:crosshair}
+.tl{position:absolute;left:12px;right:12px;bottom:12px;z-index:800;background:rgba(10,20,40,.92);border:1px solid var(--bd);border-radius:12px;padding:9px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.tl button{background:var(--oro);color:var(--noche);border:0;border-radius:7px;font:800 14px inherit;padding:6px 12px;cursor:pointer;min-width:40px}
+.tl input[type=range]{flex:1;min-width:160px;accent-color:var(--oro)}
+.tl .hora{font:700 15px inherit;min-width:150px}
+select{background:var(--panel);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:6px 8px;font:600 13.5px inherit}
+.pista{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:800;background:rgba(10,20,40,.9);border:1px solid var(--oro);border-radius:999px;padding:5px 14px;font-size:13px;color:var(--tx)}
+aside{border-left:1px solid var(--bd);overflow:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+.caja{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:12px 14px}
+.caja h3{margin:0 0 6px;font-size:16px}.caja p{margin:6px 0;font-size:14px}
+.ley{display:grid;gap:6px;margin-top:6px}
+.ley div{display:grid;grid-template-columns:22px 1fr;gap:8px;align-items:start;font-size:13.5px}
+.ley i{width:22px;height:16px;border-radius:4px;border:1px solid rgba(255,255,255,.25);margin-top:2px}
+#que{border-color:var(--oro)}
+#que .sw{display:inline-block;width:18px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:6px;border:1px solid rgba(255,255,255,.3)}
+.mu{color:var(--mu);font-size:12.5px}
+.leaflet-container{font-family:inherit}
+@media (max-width:1100px){main{grid-template-columns:1fr;grid-template-rows:auto 60vh auto}#prod{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));border-right:0;border-bottom:1px solid var(--bd)}aside{border-left:0;border-top:1px solid var(--bd)}}
+</style>
+</head>
+<body>
+<header>
+ <a href="https://metotec.cl"><img src="../incendios/logo_blanco.svg" alt="METOTEC"></a>
+ <h1>Visor satelital en español<small>GOES-19 sobre Chile · elija qué quiere ver y haga clic en el mapa</small></h1>
+ <nav><a href="../">Convección</a><a class="on" href="./">Visor satelital</a><a href="../incendios/">Incendios</a></nav>
+</header>
+<main>
+ <div id="prod"><h2>¿Qué quiere ver?</h2></div>
+ <div id="mapwrap"><div id="mapa"></div>
+  <div class="pista" id="pista">Haga clic en el mapa: le digo qué está viendo</div>
+  <div class="tl">
+   <button id="play" title="Animar">▶</button>
+   <select id="rango"><option value="3" selected>Últimas 3 horas</option><option value="12">Últimas 12 horas</option><option value="24">Últimas 24 horas</option></select>
+   <span class="hora" id="hframe">—</span>
+   <input type="range" id="paso" min="0" max="1" value="1">
+  </div>
+ </div>
+ <aside>
+  <div class="caja" id="que"><h3>¿Qué estoy viendo?</h3><p class="mu">Haga clic en cualquier punto del mapa y aquí aparece qué es, según el color de la imagen.</p></div>
+  <div class="caja" id="info"></div>
+  <p class="mu">Imágenes del satélite GOES-19 (NOAA) publicadas por NASA GIBS, con ~40 minutos de atraso. La interpretación por color es una ayuda para aprender a leer la imagen, no un análisis oficial. Iniciativa sin fines de lucro de <a href="https://metotec.cl" style="color:var(--oro)">METOTEC</a>.</p>
+ </aside>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+/* ---------- productos: qué es, para qué sirve, cómo leer los colores ---------- */
+const PROD = [
+ {k: "geo", capa: "GOES-East_ABI_GeoColor", nom: "Color real", sub: "Como se ve desde el espacio; de noche, nubes y luces", mues: "linear-gradient(135deg,#f3f3f3,#6b8d4e 55%,#173a73)",
+  que: "De día muestra el planeta como lo veríamos con nuestros ojos. De noche cambia a infrarrojo: las nubes bajas se ven celestes y las altas blancas, sobre un fondo oscuro con las luces de las ciudades.",
+  sirve: "Ver nubes, niebla costera, humo de incendios, nieve en la cordillera y polvo. Es la imagen más fácil de entender.",
+  ojo: "La niebla y las nubes bajas se confunden con la nieve de día; el humo se ve como un velo gris pardo.",
+  ley: [["#f2f2f2", [242, 242, 242], "Nubes espesas, niebla o nieve (blanco brillante)"], ["#b9bcc2", [185, 188, 194], "Nubes delgadas o neblina"], ["#9a8b74", [154, 139, 116], "Humo o polvo (velo gris pardo)"], ["#5e7a46", [94, 122, 70], "Vegetación con cielo despejado"], ["#a88a63", [168, 138, 99], "Suelo desnudo o desierto despejado"], ["#16305c", [22, 48, 92], "Mar despejado"],
+        ["#7ea3c9", [126, 163, 201], "De noche: nubes bajas o niebla (celeste)"], ["#d9dde6", [217, 221, 230], "De noche: nubes altas y frías"], ["#e6c47a", [230, 196, 122], "De noche: luces de ciudad"], ["#0a0f1e", [10, 15, 30], "De noche: cielo despejado"]]},
+ {k: "vis", capa: "GOES-East_ABI_Band2_Red_Visible_1km", nom: "Visible en detalle", sub: "La banda más nítida; solo de día", mues: "linear-gradient(135deg,#fff,#777 50%,#111)",
+  que: "La banda 2 del satélite (luz roja visible) en blanco y negro. Es la de más detalle: deja ver la textura de las nubes.",
+  sirve: "Distinguir cúmulos (granulados, con sombra) de estratos (lisos), ver la niebla costera avanzar y el humo cerca de su origen.",
+  ojo: "De noche queda negra. La nieve y las nubes se ven igual de blancas.",
+  ley: [["#ffffff", [250, 250, 250], "Nubes espesas, niebla o nieve"], ["#b5b5b5", [181, 181, 181], "Nubes delgadas, neblina o humo"], ["#5c5c5c", [92, 92, 92], "Superficie con vegetación o suelo despejado"], ["#151515", [21, 21, 21], "Mar despejado o noche"]]},
+ {k: "ir", capa: "GOES-East_ABI_Band13_Clean_Infrared", nom: "Infrarrojo · temperatura de las nubes", sub: "Día y noche; colores = nubes muy frías", mues: "linear-gradient(135deg,#222,#bbb 45%,#1c5ad6 60%,#e8e030 75%,#e02020)",
+  que: "Mide el calor que emiten las nubes y la superficie (banda 13, 10,3 µm). Lo frío se ve claro y lo cálido oscuro. Los topes más fríos llevan colores.",
+  sirve: "Seguir nubes de día y de noche, ver qué tan altas son y detectar tormentas: un tope muy frío y en colores es una nube muy alta, como un cumulonimbo.",
+  ojo: "La niebla y las nubes muy bajas casi no se ven, porque tienen la misma temperatura que el suelo.",
+  ley: [["#2a2a2a", [42, 42, 42], "Superficie o nubes muy bajas (cálidas)"], ["#8c8c8c", [140, 140, 140], "Nubes bajas a medias"], ["#e6e6e6", [230, 230, 230], "Nubes altas y frías"], ["#2f6fe0", [47, 111, 224], "Topes muy fríos (−40 °C o menos)"], ["#2fb04a", [47, 176, 74], "Topes muy fríos: nube de gran desarrollo"], ["#e8e030", [232, 224, 48], "Topes extremadamente fríos: posible tormenta"], ["#e02020", [224, 32, 32], "Topes más fríos aún: cumulonimbo intenso"]]},
+ {k: "fuego", capa: "GOES-East_ABI_FireTemp", nom: "Fuego", sub: "Incendios en rojo, amarillo o blanco", mues: "linear-gradient(135deg,#1b0b2e,#d01818 45%,#ffb000 70%,#fff)",
+  que: "Combinación de tres bandas infrarrojas (3,9; 2,2 y 1,6 µm) hecha para resaltar el fuego. Un incendio aparece rojo si es pequeño o tibio, naranja o amarillo si es más intenso y blanco si es muy intenso.",
+  sirve: "Ver incendios activos, de día y de noche, y cómo crecen de una imagen a otra.",
+  ojo: "Fuegos muy pequeños no alcanzan a verse (un píxel tiene ~2 km). De día el suelo caliente del desierto puede verse rojizo.",
+  ley: [["#ffffff", [255, 255, 255], "Fuego muy intenso"], ["#ffc21a", [255, 194, 26], "Fuego intenso"], ["#ff6a00", [255, 106, 0], "Fuego moderado"], ["#c41616", [196, 22, 22], "Fuego pequeño o suelo muy caliente"], ["#3fa7d6", [63, 167, 214], "Nubes de agua"], ["#4fb87a", [79, 184, 122], "Nubes de hielo"], ["#2a1f4a", [42, 31, 74], "Superficie sin fuego"], ["#05050a", [5, 5, 10], "Superficie fría o noche sin fuego"]]},
+ {k: "polvo", capa: "GOES-East_ABI_Dust", nom: "Polvo", sub: "Polvo en suspensión en rosado", mues: "linear-gradient(135deg,#d65ab8,#b0a0d8 50%,#6a1010)",
+  que: "Combinación de bandas infrarrojas que separa el polvo de las nubes. El polvo en suspensión se ve rosado o magenta.",
+  sirve: "Seguir tormentas de polvo y arena (por ejemplo desde Argentina o el norte de Chile) y distinguir el polvo de las nubes.",
+  ojo: "Con poca cantidad de polvo el color rosado es tenue y se confunde con el fondo.",
+  ley: [["#d65ab8", [214, 90, 184], "Polvo en suspensión"], ["#7a1414", [122, 20, 20], "Nubes altas y espesas"], ["#101010", [16, 16, 16], "Nubes altas delgadas (cirros)"], ["#c8a040", [200, 160, 64], "Nubes medias"], ["#b0a8d8", [176, 168, 216], "Superficie despejada"], ["#5f8fd0", [95, 143, 208], "Superficie despejada (noche o mar)"]]},
+ {k: "aire", capa: "GOES-East_ABI_Air_Mass", nom: "Masas de aire", sub: "Aire frío, cálido y seco; frentes y chorro", mues: "linear-gradient(135deg,#3d2f8f,#3f7a2a 45%,#c0402a 80%)",
+  que: "Combinación de bandas de vapor de agua y ozono. Colorea el aire según su origen: frío polar, cálido tropical o seco que baja desde muy alto.",
+  sirve: "Ver frentes, sistemas frontales y bajas segregadas que llegan a Chile, y la corriente en chorro.",
+  ojo: "Muestra sobre todo la atmósfera media y alta: las nubes bajas y la niebla casi no aparecen.",
+  ley: [["#c0402a", [192, 64, 42], "Aire seco que desciende desde muy alto (cerca del chorro)"], ["#3f7a2a", [63, 122, 42], "Aire cálido y húmedo (tropical)"], ["#3d2f8f", [61, 47, 143], "Aire frío (polar)"], ["#f0f0f0", [240, 240, 240], "Nubes altas espesas (tormentas, frentes)"], ["#c9a04a", [201, 160, 74], "Nubes medias"], ["#2e5fa8", [46, 95, 168], "Aire frío con nubes bajas"]]},
+];
+let P = PROD[0];
+$("#prod").innerHTML += PROD.map(p => `<button class="p" data-k="${p.k}"><i style="background:${p.mues}"></i><span><b>${p.nom}</b><small>${p.sub}</small></span></button>`).join("");
+function info(){
+  document.querySelectorAll(".p").forEach(b => b.classList.toggle("on", b.dataset.k === P.k));
+  $("#info").innerHTML = `<h3>${P.nom}</h3><p>${P.que}</p><p><b>Sirve para:</b> ${P.sirve}</p><p><b>Ojo:</b> ${P.ojo}</p>
+    <h2 style="font-size:12px;color:var(--mu);margin:10px 0 2px;text-transform:uppercase;letter-spacing:.08em">Cómo leer los colores</h2>
+    <div class="ley">${P.ley.map(([c, , t]) => `<div><i style="background:${c}"></i><span>${t}</span></div>`).join("")}</div>`;
+}
+/* ---------- mapa y tiempo ---------- */
+const mapa = L.map("mapa", {zoomControl: true}).setView([-35.5, -71.5], 5);
+mapa.createPane("sat"); mapa.getPane("sat").style.zIndex = 250;
+mapa.createPane("ref"); mapa.getPane("ref").style.zIndex = 450; mapa.getPane("ref").style.pointerEvents = "none";
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {pane: "ref", maxZoom: 12, opacity: .8, attribution: "Límites © Esri"}).addTo(mapa);
+const PLANT = []; ["best", "nrt", "all"].forEach(ep => [7, 8, 6, 9].forEach(n => ["png", "jpg"].forEach(f => PLANT.push([`GoogleMapsCompatible_Level${n}`, f, ep]))));
+const conf = {}, cache = {};
+let FR = [], iFr = 0, anim = null;
+const PASO = {3: 10, 12: 20, 24: 30};
+const iso = d => d.toISOString().slice(0, 19) + "Z";
+function cuadros(){ const h = +$("#rango").value, p = PASO[h] * 60000, fin = Math.floor((Date.now() - 45 * 60000) / p) * p, n = Math.round(h * 60 / PASO[h]);
+  return Array.from({length: n + 1}, (_, i) => new Date(fin - (n - i) * p)); }
+function probar(capa){
+  if (conf[capa] !== undefined) return Promise.resolve(conf[capa]);
+  const d = new Date(Math.floor((Date.now() - 90 * 60000) / 600000) * 600000);
+  return new Promise(res => { let k = 0;
+    const sig = () => { if (k >= PLANT.length){ conf[capa] = null; return res(null); }
+      const c = PLANT[k++], im = new Image(); im.onload = () => { conf[capa] = c; res(c); }; im.onerror = sig;
+      im.src = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${capa}/default/${iso(d)}/${c[0]}/4/9/4.${c[1]}`; };
+    sig(); });
+}
+const url = (c, capa, d) => `https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${capa}/default/${iso(d)}/${c[0]}/{z}/{y}/{x}.${c[1]}`;
+function capaDe(i){
+  const k = P.k + iso(FR[i]); if (cache[k]) return cache[k];
+  const c = conf[P.capa], mz = +c[0].match(/Level(\d+)/)[1];
+  return cache[k] = L.tileLayer(url(c, P.capa, FR[i]), {maxNativeZoom: mz, maxZoom: 12, opacity: 0, pane: "sat", crossOrigin: "anonymous", attribution: "GOES-19 · NOAA / NASA GIBS"});
+}
+async function armar(){
+  pararAnim();
+  Object.values(cache).forEach(l => l.remove()); Object.keys(cache).forEach(k => delete cache[k]);
+  info();
+  const c = await probar(P.capa);
+  if (!c){ $("#hframe").textContent = "Imagen no disponible"; $("#pista").textContent = "NASA no entregó esta imagen ahora; pruebe otra o más tarde."; return; }
+  $("#pista").textContent = "Haga clic en el mapa: le digo qué está viendo";
+  FR = cuadros(); $("#paso").max = FR.length - 1; ver(FR.length - 1);
+}
+function ver(i){
+  iFr = i; $("#paso").value = i;
+  $("#hframe").textContent = FR[i].toLocaleString("es-CL", {weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}) + (i === FR.length - 1 ? " · última" : "");
+  const l = capaDe(i); if (!mapa.hasLayer(l)) l.addTo(mapa);
+  let hecho = false;
+  const mostrar = () => { if (hecho) return; hecho = true; l.setOpacity(1); Object.values(cache).forEach(o => { if (o !== l) o.setOpacity(0); }); };
+  if (l.isLoading && l.isLoading()){ l.once("load", mostrar); setTimeout(mostrar, 1500); } else mostrar();
+  if (i + 1 < FR.length){ const s = capaDe(i + 1); if (!mapa.hasLayer(s)) s.addTo(mapa); }
+}
+function pararAnim(){ if (anim){ clearInterval(anim); anim = null; $("#play").textContent = "▶"; } }
+$("#play").addEventListener("click", () => { if (anim) return pararAnim(); $("#play").textContent = "❚❚"; if (iFr >= FR.length - 1) ver(0);
+  anim = setInterval(() => { if (iFr >= FR.length - 1) return pararAnim(); ver(iFr + 1); }, 600); });
+$("#paso").addEventListener("input", ev => { pararAnim(); ver(+ev.target.value); });
+$("#rango").addEventListener("change", armar);
+$("#prod").addEventListener("click", ev => { const b = ev.target.closest(".p"); if (!b) return; P = PROD.find(p => p.k === b.dataset.k); armar(); });
+/* ---------- ¿Qué estoy viendo? (color del píxel → explicación) ---------- */
+let marca = null;
+mapa.on("click", async ev => {
+  if (marca) marca.remove();
+  marca = L.circleMarker(ev.latlng, {radius: 7, color: "#C9A54C", weight: 3, fill: false}).addTo(mapa);
+  const c = conf[P.capa]; if (!c){ return; }
+  const mz = +c[0].match(/Level(\d+)/)[1], z = Math.min(mapa.getZoom(), mz);
+  const pt = mapa.project(ev.latlng, z), tx = Math.floor(pt.x / 256), ty = Math.floor(pt.y / 256);
+  const u = url(c, P.capa, FR[iFr]).replace("{z}", z).replace("{x}", tx).replace("{y}", ty);
+  $("#que").innerHTML = `<h3>¿Qué estoy viendo?</h3><p class="mu">Leyendo la imagen…</p>`;
+  try {
+    const im = new Image(); im.crossOrigin = "anonymous";
+    await new Promise((ok, no) => { im.onload = ok; im.onerror = no; im.src = u; });
+    const cv = document.createElement("canvas"); cv.width = cv.height = 256; const cx = cv.getContext("2d"); cx.drawImage(im, 0, 0);
+    const px = Math.floor(pt.x - tx * 256), py = Math.floor(pt.y - ty * 256);
+    const d = cx.getImageData(Math.max(0, px - 1), Math.max(0, py - 1), 3, 3).data;   // promedio de 3×3 píxeles
+    let r = 0, g = 0, b = 0; for (let k = 0; k < d.length; k += 4){ r += d[k]; g += d[k + 1]; b += d[k + 2]; } r /= 9; g /= 9; b /= 9;
+    const L2 = P.ley.map(([h, rgb, t]) => [Math.hypot(r - rgb[0], g - rgb[1], b - rgb[2]), h, t]).sort((a, b) => a[0] - b[0]);
+    const seguro = L2[0][0] < 60, rgbTxt = `rgb(${r | 0},${g | 0},${b | 0})`;
+    $("#que").innerHTML = `<h3>¿Qué estoy viendo?</h3>
+      <p><span class="sw" style="background:${rgbTxt}"></span><b>${seguro ? "Probablemente: " : "Parecido a: "}${L2[0][2].toLowerCase()}</b></p>
+      ${!seguro || L2[1][0] - L2[0][0] < 15 ? `<p class="mu">También podría ser: ${L2[1][2].toLowerCase()}.</p>` : ""}
+      <p class="mu">${P.nom} · ${FR[iFr].toLocaleTimeString("es-CL", {hour: "2-digit", minute: "2-digit"})} · ${ev.latlng.lat.toFixed(2)}°, ${ev.latlng.lng.toFixed(2)}° · interpretación por el color de la imagen.</p>`;
+  } catch (e) {
+    $("#que").innerHTML = `<h3>¿Qué estoy viendo?</h3><p class="mu">No se pudo leer el color en ese punto (la imagen aún no carga o no está disponible). Compare con la guía de colores de abajo.</p>`;
+  }
+});
+armar();
+setInterval(() => { if (!anim && iFr === FR.length - 1) armar(); }, 10 * 60000);
+</script>
+</body>
+</html>
