@@ -143,8 +143,23 @@ const conf = {"VIIRS_NOAA20_CorrectedReflectance_TrueColor": ["GoogleMapsCompati
 let FR = [], iFr = 0, anim = null;
 const PASO = {3: 10, 12: 20, 24: 30};
 const iso = d => d.toISOString().slice(0, 19) + "Z";
+
+/* GIBS publica las imágenes GOES con 40 a 90 min de atraso: se busca la más reciente que ya exista */
+const ULT = {};
+function ultimaDisponible(capa, c){
+  if (ULT[capa]) return Promise.resolve(ULT[capa]);
+  const base = Math.floor((Date.now() - 30 * 60000) / 600000) * 600000;
+  return new Promise(res => { let k = 0;
+    const sig = () => { if (k > 15){ ULT[capa] = new Date(base - 120 * 60000); return res(ULT[capa]); }
+      const d = new Date(base - k++ * 600000), im = new Image();
+      im.onload = () => { ULT[capa] = d; setTimeout(() => delete ULT[capa], 9 * 60000); res(d); }; im.onerror = sig;
+      im.src = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${capa}/default/${d.toISOString().slice(0, 19)}Z/${c[0]}/4/9/4.${c[1]}`; };
+    sig(); });
+}
+let FIN = null;
 function cuadros(){ if (P.diario){ const hoy = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()); return Array.from({length: 7}, (_, i) => new Date(hoy - (6 - i) * 864e5)); }
-  const h = +$("#rango").value, p = PASO[h] * 60000, fin = Math.floor((Date.now() - 45 * 60000) / p) * p, n = Math.round(h * 60 / PASO[h]);
+  const h = +$("#rango").value, p = PASO[h] * 60000, n = Math.round(h * 60 / PASO[h]);
+  const fin = FIN ? FIN.getTime() : Math.floor((Date.now() - 60 * 60000) / p) * p;
   return Array.from({length: n + 1}, (_, i) => new Date(fin - (n - i) * p)); }
 function probar(capa){
   if (conf[capa] !== undefined) return Promise.resolve(conf[capa]);
@@ -180,6 +195,7 @@ async function armar(){
   const c = await probar(P.capa);
   if (!c){ $("#hframe").textContent = "Imagen no disponible"; $("#pista").textContent = "NASA no entregó esta imagen ahora; pruebe otra o más tarde."; return; }
   $("#pista").textContent = "Haga clic en el mapa: le digo qué está viendo";
+  if (!P.diario) FIN = await ultimaDisponible(P.capa, c);
   FR = cuadros(); $("#paso").max = FR.length - 1; ver(P.diario && new Date().getUTCHours() < 20 ? FR.length - 2 : FR.length - 1);
 }
 function ver(i){

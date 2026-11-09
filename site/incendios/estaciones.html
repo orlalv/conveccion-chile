@@ -71,8 +71,22 @@ const mapa = L.map("mapa").setView([-34.35, -71.0], 8);
 const esri = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, attribution: "Imagen © Esri"});
 /* imagen real del GOES-19 (color real), la más reciente; se renueva cada 10 min */
 let goes = null;
-function fondoGoes(){
-  const d = new Date(Math.floor((Date.now() - 45 * 60000) / 600000) * 600000), t = d.toISOString().slice(0, 19) + "Z";
+
+/* GIBS publica las imágenes GOES con 40 a 90 min de atraso: se busca la más reciente que ya exista */
+const ULT = {};
+function ultimaDisponible(capa, c){
+  if (ULT[capa]) return Promise.resolve(ULT[capa]);
+  const base = Math.floor((Date.now() - 30 * 60000) / 600000) * 600000;
+  return new Promise(res => { let k = 0;
+    const sig = () => { if (k > 15){ ULT[capa] = new Date(base - 120 * 60000); return res(ULT[capa]); }
+      const d = new Date(base - k++ * 600000), im = new Image();
+      im.onload = () => { ULT[capa] = d; setTimeout(() => delete ULT[capa], 9 * 60000); res(d); }; im.onerror = sig;
+      im.src = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${capa}/default/${d.toISOString().slice(0, 19)}Z/${c[0]}/4/9/4.${c[1]}`; };
+    sig(); });
+}
+async function fondoGoes(){
+  delete ULT["GOES-East_ABI_GeoColor"];
+  const d = await ultimaDisponible("GOES-East_ABI_GeoColor", ["GoogleMapsCompatible_Level7", "png", "best"]), t = d.toISOString().slice(0, 19) + "Z";
   const nueva = L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/GOES-East_ABI_GeoColor/default/${t}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
     {maxNativeZoom: 7, maxZoom: 15, attribution: "GOES-19 · NOAA / NASA GIBS"});
   if ($("#fondo").value !== "goes"){ if (goes) goes.remove(); goes = null; esri.addTo(mapa); return; }

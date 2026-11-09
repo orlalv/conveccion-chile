@@ -130,10 +130,25 @@ const conf = {"VIIRS_NOAA20_CorrectedReflectance_TrueColor": ["GoogleMapsCompati
 let FR = [], iFr = 0, anim = null, fondo = "geo", visible = null;
 const PASO = {3: 10, 12: 20, 24: 30, 72: 60};
 const iso = d => d.toISOString().slice(0, 19) + "Z";
+
+/* GIBS publica las imágenes GOES con 40 a 90 min de atraso: se busca la más reciente que ya exista */
+const ULT = {};
+function ultimaDisponible(capa, c){
+  if (ULT[capa]) return Promise.resolve(ULT[capa]);
+  const base = Math.floor((Date.now() - 30 * 60000) / 600000) * 600000;
+  return new Promise(res => { let k = 0;
+    const sig = () => { if (k > 15){ ULT[capa] = new Date(base - 120 * 60000); return res(ULT[capa]); }
+      const d = new Date(base - k++ * 600000), im = new Image();
+      im.onload = () => { ULT[capa] = d; setTimeout(() => delete ULT[capa], 9 * 60000); res(d); }; im.onerror = sig;
+      im.src = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${capa}/default/${d.toISOString().slice(0, 19)}Z/${c[0]}/4/9/4.${c[1]}`; };
+    sig(); });
+}
+let FIN = null;
 function cuadros(){
   if (fondo === "hd"){ const n = Math.max(1, Math.ceil(+$("#rango").value / 24)), hoy = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()); return Array.from({length: n + 1}, (_, i) => new Date(hoy - (n - i) * 864e5)); }
   if (fondo === "b7") return (D && D.b7 || []).map(ts => new Date(Date.UTC(+ts.slice(0, 4), +ts.slice(4, 6) - 1, +ts.slice(6, 8), +ts.slice(8, 10), +ts.slice(10, 12))));
-  const h = +$("#rango").value, p = PASO[h] * 60000, fin = Math.floor((Date.now() - 45 * 60000) / p) * p, n = Math.round(h * 60 / PASO[h]);
+  const h = +$("#rango").value, p = PASO[h] * 60000, n = Math.round(h * 60 / PASO[h]);
+  const fin = FIN ? Math.floor(FIN.getTime() / 600000) * 600000 : Math.floor((Date.now() - 60 * 60000) / p) * p;
   return Array.from({length: n + 1}, (_, i) => new Date(fin - (n - i) * p));
 }
 function probar(capa){
@@ -172,6 +187,7 @@ async function armarFondo(){
   } else {
     const c = await probar(fondo);
     if (!c){ esri.addTo(mapa); nota = "No se pudo cargar la imagen GOES-19 de NASA GIBS; se muestra el mapa base."; fondo = "esri"; $("#fondo").value = "esri"; }
+    else if (fondo !== "hd") FIN = await ultimaDisponible(GIBS[fondo], c);
   }
   $("#nota").textContent = nota;
   $("#rango").disabled = fondo === "b7";
