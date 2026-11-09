@@ -70,7 +70,18 @@ const DIRS = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
 const mapa = L.map("mapa").setView([-34.35, -71.0], 8);
 const esri = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, attribution: "Imagen © Esri"});
 /* imagen real del GOES-19 (color real), la más reciente; se renueva cada 10 min */
-let goes = null;
+let goes = null, vivo = null;
+mapa.createPane("vivo").style.zIndex = 250; mapa.createPane("ref").style.zIndex = 300; mapa.getPane("ref").style.pointerEvents = "none";
+/* encima, en la zona central: el color real propio de METOTEC (10 a 20 min de atraso, más nítido y más reciente que GIBS) */
+function capaVivo(){
+  const ult = D && D.vivo && D.vivo.length ? D.vivo[D.vivo.length - 1] : null;
+  if ($("#fondo").value !== "goes" || !ult){ if (vivo) vivo.remove(); vivo = null; return; }
+  const d = new Date(Date.UTC(+ult.slice(0, 4), +ult.slice(4, 6) - 1, +ult.slice(6, 8), +ult.slice(8, 10), +ult.slice(10, 12)));
+  $("#himg").textContent = "Imagen GOES-19 de las " + d.toLocaleTimeString("es-CL", {hour: "2-digit", minute: "2-digit"}) + " (zona central, METOTEC)";
+  if (vivo && vivo._ts === ult) return;
+  const n = L.imageOverlay(`vivo/${ult}.jpg`, D.zona_img, {pane: "vivo"}); n._ts = ult;
+  n.once("load", () => { if (vivo && vivo !== n) vivo.remove(); vivo = n; }); n.addTo(mapa);
+}
 
 /* GIBS publica las imágenes GOES con 40 a 90 min de atraso, por partes y a veces salta horarios:
    se busca el último horario con varias teselas de Chile ya publicadas y, si a una tesela le falta un horario,
@@ -100,11 +111,12 @@ async function fondoGoes(){
   const d = await ultimaDisponible("GOES-East_ABI_GeoColor", ["GoogleMapsCompatible_Level7", "png", "best"]), t = d.toISOString().slice(0, 19) + "Z";
   const nueva = L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/GOES-East_ABI_GeoColor/default/${t}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
     {maxNativeZoom: 7, maxZoom: 15, crossOrigin: "anonymous", attribution: "GOES-19 · NOAA / NASA GIBS"}); respaldo(nueva);
-  if ($("#fondo").value !== "goes"){ if (goes) goes.remove(); goes = null; esri.addTo(mapa); return; }
+  if ($("#fondo").value !== "goes"){ if (goes) goes.remove(); goes = null; esri.addTo(mapa); capaVivo(); return; }
   esri.remove(); nueva.addTo(mapa); nueva.bringToBack(); nueva.once("load", () => { if (goes && goes !== nueva) goes.remove(); goes = nueva; }); setTimeout(() => { if (goes && goes !== nueva) goes.remove(); goes = nueva; }, 4000);
   $("#himg").textContent = "Imagen GOES-19 de las " + d.toLocaleTimeString("es-CL", {hour: "2-digit", minute: "2-digit"});
+  capaVivo();
 }
-L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, opacity: .8}).addTo(mapa);
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, opacity: .8, pane: "ref"}).addTo(mapa);
 const capas = {fuego: L.layerGroup().addTo(mapa), est: L.layerGroup().addTo(mapa), lineas: L.layerGroup().addTo(mapa)};
 let E = [], TODAS = [], D = null, sel = null, primeraVez = true;
 
@@ -178,7 +190,7 @@ async function cargar(){
   try { const r = await fetch(API, {cache: "no-store"}); const j = r.ok ? await r.json() : {estaciones: []}; TODAS = (j.estaciones || []).sort((a, b) => a.dist - b.dist);
     $("#act").textContent = j.generado ? `Actualizado ${new Date(j.generado).toLocaleTimeString("es-CL", {hour: "2-digit", minute: "2-digit"})} · cada 30 minutos` : "Sin datos todavía"; } catch (e) { E = []; $("#act").textContent = "No se pudo leer las estaciones"; }
   try { const r = await fetch("data.json?t=" + Date.now(), {cache: "no-store"}); D = r.ok ? await r.json() : null; } catch (e) { D = null; }
-  pintar();
+  pintar(); capaVivo();
 }
 document.addEventListener("click", ev => { const x = ev.target.closest(".est"); if (x) detalle(+x.dataset.k); });
 $("#radio").addEventListener("change", () => { sel = null; primeraVez = true; pintar(); });
