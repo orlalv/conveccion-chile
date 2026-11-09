@@ -25,6 +25,7 @@ jobs:
           await b.close();})();
           JS
           node cap.js
+          curl -s -o data_incendios.json https://satelite.metotec.cl/incendios/data.json; curl -s -o quemadas.geojson https://satelite.metotec.cl/incendios/quemadas.geojson
           rm -rf node_modules package*.json cap.js
           git init -q -b capturas && git add . && git -c user.name=bot -c user.email=bot@metotec.cl commit -qm capturas
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" capturas
