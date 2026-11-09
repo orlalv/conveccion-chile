@@ -85,6 +85,11 @@ const PROD = [
   ojo: "La niebla y las nubes bajas se confunden con la nieve de día; el humo se ve como un velo gris pardo.",
   ley: [["#eeeeee", [235, 236, 238], "Nubes espesas, niebla o nieve (blanco)"], ["#babcbe", [186, 188, 190], "Nubes medias o nubes espesas a la sombra"], ["#96999c", [150, 153, 156], "Nubes delgadas o neblina"], ["#766f6c", [118, 111, 108], "Velo gris pardo: nubes muy delgadas, humo o polvo"], ["#5e5042", [94, 80, 66], "Suelo desnudo o desierto despejado"], ["#3d3d24", [61, 61, 36], "Vegetación o suelo oscuro, despejado"], ["#08151a", [8, 21, 21], "Mar despejado"], ["#253d48", [37, 61, 72], "Mar con bruma o nubes muy delgadas"],
         ["#78a0c8", [120, 150, 188], "De noche: niebla o nubes bajas espesas (celeste)"], ["#576d8b", [87, 109, 139], "De noche: nubes bajas"], ["#13102a", [19, 13, 35], "De noche: tierra despejada"], ["#0a0d11", [10, 13, 17], "De noche: mar despejado"], ["#e6963c", [230, 150, 60], "De noche: luces de ciudad"], ["#c8c8d2", [200, 200, 210], "De noche: nubes altas y frías"]]},
+ {k: "hd", capa: "VIIRS_NOAA20_CorrectedReflectance_TrueColor", diario: true, nom: "Alta resolución (1 vez al día)", sub: "Color real con 375 m de detalle; satélite polar", mues: "linear-gradient(135deg,#fff,#7a9a5a 50%,#1d3b6e)",
+  que: "Color real del satélite polar NOAA-20 (sensor VIIRS), que pasa sobre Chile una vez al día cerca del mediodía. Tiene unas 5 veces más detalle que el GOES-19 (375 m por píxel).",
+  sirve: "Ver con detalle la nieve, el humo, las cicatrices de incendios, la niebla costera y la forma de las nubes. Ideal para comparar días.",
+  ojo: "Es una sola imagen por día (no hay animación cada 10 minutos). Entre una pasada y otra puede faltar una franja; las fechas son en hora UTC.",
+  ley: [["#eeeeee", [235, 236, 238], "Nubes, niebla o nieve"], ["#9a9c9e", [154, 156, 158], "Nubes delgadas o neblina"], ["#8a7a68", [138, 122, 104], "Humo o polvo (velo pardo)"], ["#5e5042", [94, 80, 66], "Suelo desnudo o desierto"], ["#3d4a24", [61, 74, 36], "Vegetación"], ["#2b1f1a", [43, 31, 26], "Cicatriz de incendio (café oscuro)"], ["#0a1a2a", [10, 26, 42], "Mar o lago"]]},
  {k: "vis", capa: "GOES-East_ABI_Band2_Red_Visible_1km", nom: "Visible en detalle", sub: "La banda más nítida; solo de día", mues: "linear-gradient(135deg,#fff,#777 50%,#111)",
   que: "La banda 2 del satélite (luz roja visible) en blanco y negro. Es la de más detalle: deja ver la textura de las nubes.",
   sirve: "Distinguir cúmulos (granulados, con sombra) de estratos (lisos), ver la niebla costera avanzar y el humo cerca de su origen.",
@@ -132,13 +137,14 @@ L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/Worl
 const gris = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {maxZoom: 12, attribution: "© Esri"});
 let NB = null;
 const PLANT = []; ["best", "nrt", "all"].forEach(ep => [7, 8, 6, 9].forEach(n => ["png", "jpg"].forEach(f => PLANT.push([`GoogleMapsCompatible_Level${n}`, f, ep]))));
-const conf = {"GOES-East_ABI_GeoColor": ["GoogleMapsCompatible_Level7", "png", "best"], "GOES-East_ABI_Band2_Red_Visible_1km": ["GoogleMapsCompatible_Level7", "png", "best"],
+const conf = {"VIIRS_NOAA20_CorrectedReflectance_TrueColor": ["GoogleMapsCompatible_Level9", "jpg", "best"], "GOES-East_ABI_GeoColor": ["GoogleMapsCompatible_Level7", "png", "best"], "GOES-East_ABI_Band2_Red_Visible_1km": ["GoogleMapsCompatible_Level7", "png", "best"],
   "GOES-East_ABI_Band13_Clean_Infrared": ["GoogleMapsCompatible_Level6", "png", "best"], "GOES-East_ABI_FireTemp": ["GoogleMapsCompatible_Level7", "png", "best"],
   "GOES-East_ABI_Dust": ["GoogleMapsCompatible_Level7", "png", "best"], "GOES-East_ABI_Air_Mass": ["GoogleMapsCompatible_Level6", "png", "best"]}, cache = {};   // verificado en NASA GIBS (nov 2026)
 let FR = [], iFr = 0, anim = null;
 const PASO = {3: 10, 12: 20, 24: 30};
 const iso = d => d.toISOString().slice(0, 19) + "Z";
-function cuadros(){ const h = +$("#rango").value, p = PASO[h] * 60000, fin = Math.floor((Date.now() - 45 * 60000) / p) * p, n = Math.round(h * 60 / PASO[h]);
+function cuadros(){ if (P.diario){ const hoy = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()); return Array.from({length: 7}, (_, i) => new Date(hoy - (6 - i) * 864e5)); }
+  const h = +$("#rango").value, p = PASO[h] * 60000, fin = Math.floor((Date.now() - 45 * 60000) / p) * p, n = Math.round(h * 60 / PASO[h]);
   return Array.from({length: n + 1}, (_, i) => new Date(fin - (n - i) * p)); }
 function probar(capa){
   if (conf[capa] !== undefined) return Promise.resolve(conf[capa]);
@@ -149,12 +155,12 @@ function probar(capa){
       im.src = `https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${capa}/default/${iso(d)}/${c[0]}/4/9/4.${c[1]}`; };
     sig(); });
 }
-const url = (c, capa, d) => `https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${capa}/default/${iso(d)}/${c[0]}/{z}/{y}/{x}.${c[1]}`;
+const url = (c, capa, d) => `https://gibs.earthdata.nasa.gov/wmts/epsg3857/${c[2]}/${capa}/default/${P.diario ? d.toISOString().slice(0, 10) : iso(d)}/${c[0]}/{z}/{y}/{x}.${c[1]}`;
 function capaDe(i){
   const k = P.k + iso(FR[i]); if (cache[k]) return cache[k];
   if (P.propio) return cache[k] = L.imageOverlay(`../niebla/${NB.cuadros[i]}.png`, NB.limites, {opacity: 0, pane: "sat"});
   const c = conf[P.capa], mz = +c[0].match(/Level(\d+)/)[1];
-  return cache[k] = L.tileLayer(url(c, P.capa, FR[i]), {maxNativeZoom: mz, maxZoom: 12, opacity: 0, pane: "sat", crossOrigin: "anonymous", attribution: "GOES-19 · NOAA / NASA GIBS"});
+  return cache[k] = L.tileLayer(url(c, P.capa, FR[i]), {maxNativeZoom: mz, maxZoom: P.diario ? 13 : 12, opacity: 0, pane: "sat", crossOrigin: "anonymous", attribution: "GOES-19 · NOAA / NASA GIBS"});
 }
 async function armar(){
   pararAnim();
@@ -170,15 +176,16 @@ async function armar(){
     FR = NB.cuadros.map(ts => new Date(Date.UTC(+ts.slice(0, 4), +ts.slice(4, 6) - 1, +ts.slice(6, 8), +ts.slice(8, 10), +ts.slice(10, 12))));
     $("#paso").max = FR.length - 1; ver(FR.length - 1); return;
   }
-  $("#rango").disabled = false;
+  $("#rango").disabled = !!P.diario;
   const c = await probar(P.capa);
   if (!c){ $("#hframe").textContent = "Imagen no disponible"; $("#pista").textContent = "NASA no entregó esta imagen ahora; pruebe otra o más tarde."; return; }
   $("#pista").textContent = "Haga clic en el mapa: le digo qué está viendo";
-  FR = cuadros(); $("#paso").max = FR.length - 1; ver(FR.length - 1);
+  FR = cuadros(); $("#paso").max = FR.length - 1; ver(P.diario && new Date().getUTCHours() < 20 ? FR.length - 2 : FR.length - 1);
 }
 function ver(i){
   iFr = i; $("#paso").value = i;
-  $("#hframe").textContent = FR[i].toLocaleString("es-CL", {weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}) + (i === FR.length - 1 ? " · última" : "");
+  $("#hframe").textContent = P.diario ? "Pasada del " + FR[i].toLocaleDateString("es-CL", {weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC"}) + (i === FR.length - 1 ? " (hoy; puede no haber pasado aún)" : "")
+    : FR[i].toLocaleString("es-CL", {weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}) + (i === FR.length - 1 ? " · última" : "");
   const l = capaDe(i); if (!mapa.hasLayer(l)) l.addTo(mapa);
   let hecho = false;
   const mostrar = () => { if (hecho) return; hecho = true; l.setOpacity(1); Object.values(cache).forEach(o => { if (o !== l) o.setOpacity(0); }); };
