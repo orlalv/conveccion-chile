@@ -248,9 +248,11 @@ def agrupar(focos, ahora, V):
         txt += f"Detectado desde las {hora_local(pri)}; última detección a las {hora_local(ult)} ({tendencia}). "
         if w:
             txt += f"Viento de {w[1]:.0f} km/h: el humo se dirige hacia el {rumbo(w[0] + 180)}."
-        out.append(dict(lat=round(la, 4), lon=round(lo, 4), localidad=n, dist=round(d, 1), rumbo=az, primera=pri, ultima=ult, edad_min=round(edad),
+        goes = any(f["fuente"] == "GOES-19" for f in g)
+        relevante = goes or frp >= 20 or len(g) >= 3          # el GOES solo ve fuegos grandes; un foco VIIRS chico y suelto suele ser quema o fuego menor
+        out.append(dict(relevante=relevante, lat=round(la, 4), lon=round(lo, 4), localidad=n, dist=round(d, 1), rumbo=az, primera=pri, ultima=ult, edad_min=round(edad),
                         focos=len(g), frp=round(frp, 1), tendencia=tendencia, viento=w, fuentes=sorted({f["fuente"] for f in g}), texto=txt))
-    out.sort(key=lambda x: (x["edad_min"] > 180, -x["frp"]))
+    out.sort(key=lambda x: (not x["relevante"], x["edad_min"] > 180, -x["frp"]))
     return out
 
 
@@ -269,7 +271,7 @@ def hora_local(t):
 def estado_localidades(incendios):
     out = {}
     for n, a, b in LOCALIDADES:
-        cerca = [(km(a, b, i["lat"], i["lon"]), i) for i in incendios if i["edad_min"] <= 360]
+        cerca = [(km(a, b, i["lat"], i["lon"]), i) for i in incendios if i["edad_min"] <= 360 and i.get("relevante", True)]
         cerca = [(d, i) for d, i in cerca if d <= 40]
         if not cerca:
             out[n] = {"nivel": 0, "texto": f"{n}: sin incendios detectados a menos de 40 km en las últimas 6 horas."}

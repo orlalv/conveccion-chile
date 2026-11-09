@@ -40,6 +40,8 @@ def registrar(temporada, focos, incendios, ahora):
     T = [r for r in (temporada or []) if _t(r["ultima"]) >= ahora - timedelta(days=DIAS_TEMPORADA)]
     vivos = [f for f in focos if not f.get("industrial")]
     for i in incendios:
+        if not i.get("relevante", True):
+            continue
         pts = [[round(f["lat"], 4), round(f["lon"], 4)] for f in vivos if _km(i["lat"], i["lon"], f["lat"], f["lon"]) <= 8]
         r = next((r for r in T if _km(i["lat"], i["lon"], r["lat"], r["lon"]) <= 8 and _t(i["primera"]) <= _t(r["ultima"]) + timedelta(days=2)), None)
         if r is None:
