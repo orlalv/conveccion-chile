@@ -72,7 +72,7 @@ h2{font-size:12.5px;margin:6px 0 0;color:var(--mu);text-transform:uppercase;lett
    </div>
    <input type="range" id="paso" min="0" max="1" value="1">
    <div class="marcas" id="marcas" title="Momentos con fuego detectado"></div>
-   <small id="nota">Imágenes GOES-19 (NOAA, vía NASA GIBS) con ~40 min de atraso · los focos se acumulan hasta la hora mostrada</small>
+   <small id="nota">Imágenes GOES-19 (NOAA, vía NASA GIBS) con 1 hora de atraso aprox. · los focos se acumulan hasta la hora mostrada</small>
   </div>
  </div>
  <aside>
@@ -178,7 +178,7 @@ async function armarFondo(){
   pararAnim();
   Object.values(cache).forEach(l => l.remove()); Object.keys(cache).forEach(k => delete cache[k]); visible = null;
   esri.remove(); gris.remove();
-  let nota = "Imágenes GOES-19 (NOAA, vía NASA GIBS) con ~40 min de atraso · los focos se acumulan hasta la hora mostrada";
+  let nota = "Imágenes GOES-19 (NOAA, vía NASA GIBS) con 1 hora de atraso aprox. · los focos se acumulan hasta la hora mostrada";
   if (fondo === "esri") esri.addTo(mapa);
   else if (fondo === "b7"){
     gris.addTo(mapa);
