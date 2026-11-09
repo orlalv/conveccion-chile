@@ -44,6 +44,10 @@ aside{border-left:1px solid var(--bd);overflow:auto;padding:14px;display:flex;fl
 <header>
  <a href="https://metotec.cl"><img src="logo_blanco.svg" alt="METOTEC"></a>
  <h1>Estaciones cerca de incendios<small id="act">Cargando…</small></h1>
+ <div style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--mu)">Distancia al fuego
+  <select id="radio" style="background:var(--panel);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:5px 8px;font:600 13px inherit"><option value="5" selected>hasta 5 km</option><option value="10">hasta 10 km</option><option value="30">hasta 30 km</option></select>
+  <select id="fondo" style="background:var(--panel);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:5px 8px;font:600 13px inherit"><option value="goes" selected>Imagen satelital en vivo (GOES-19)</option><option value="esri">Mapa base</option></select>
+  <span id="himg"></span></div>
  <nav><a href="index.html">Incendios</a><a class="on" href="estaciones.html">Estaciones cerca de incendios</a></nav>
 </header>
 <main>
@@ -52,7 +56,7 @@ aside{border-left:1px solid var(--bd);overflow:auto;padding:14px;display:flex;fl
   <div class="res" id="res"></div>
   <div id="det"></div>
   <div id="lista"></div>
-  <div class="aviso">Estaciones meteorológicas automáticas de la Dirección Meteorológica de Chile a 30 km o menos de un incendio detectado por satélite en las últimas 6 horas. En el mapa, cada estación muestra su temperatura y cuánto cambió en la última hora. Un alza brusca de temperatura con caída de humedad, sobre todo si el viento lleva el humo hacia la estación, puede ser efecto del incendio.
+  <div class="aviso">Estaciones meteorológicas automáticas de la Dirección Meteorológica de Chile cerca de un incendio detectado por satélite en las últimas 12 horas (elija la distancia arriba). Los valores son el último dato minutario recibido (se actualiza cada 30 minutos). En el mapa, cada estación muestra su temperatura y cuánto cambió en la última hora. Un alza brusca de temperatura con caída de humedad, sobre todo si el viento lleva el humo hacia la estación, puede ser efecto del incendio.
    <br><br><b>Información de apoyo, no oficial. Emergencias: CONAF 130 · Bomberos 132.</b>
    <br>Fuentes: estaciones DMC (control de calidad METOTEC) · NOAA GOES-19 y NASA FIRMS · imagen NASA GIBS.</div>
  </aside>
@@ -64,15 +68,27 @@ const ms = t => Date.parse(t.length === 17 ? t.replace("Z", ":00Z") : t);
 const API = "https://metotec.cl/api/estaciones_incendio";
 const DIRS = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
 const mapa = L.map("mapa").setView([-34.35, -71.0], 8);
-L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, attribution: "Imagen © Esri"}).addTo(mapa);
+const esri = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, attribution: "Imagen © Esri"});
+/* imagen real del GOES-19 (color real), la más reciente; se renueva cada 10 min */
+let goes = null;
+function fondoGoes(){
+  const d = new Date(Math.floor((Date.now() - 45 * 60000) / 600000) * 600000), t = d.toISOString().slice(0, 19) + "Z";
+  const nueva = L.tileLayer(`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/GOES-East_ABI_GeoColor/default/${t}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`,
+    {maxNativeZoom: 7, maxZoom: 15, attribution: "GOES-19 · NOAA / NASA GIBS"});
+  if ($("#fondo").value !== "goes"){ if (goes) goes.remove(); goes = null; esri.addTo(mapa); return; }
+  esri.remove(); nueva.addTo(mapa); nueva.bringToBack(); nueva.once("load", () => { if (goes && goes !== nueva) goes.remove(); goes = nueva; }); setTimeout(() => { if (goes && goes !== nueva) goes.remove(); goes = nueva; }, 4000);
+  $("#himg").textContent = "Imagen GOES-19 de las " + d.toLocaleTimeString("es-CL", {hour: "2-digit", minute: "2-digit"});
+}
 L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {maxZoom: 15, opacity: .8}).addTo(mapa);
 const capas = {fuego: L.layerGroup().addTo(mapa), est: L.layerGroup().addTo(mapa), lineas: L.layerGroup().addTo(mapa)};
-let E = [], D = null, sel = null, primeraVez = true;
+let E = [], TODAS = [], D = null, sel = null, primeraVez = true;
 
 function cambio(e){
-  const S = e.serie || [], u = S[S.length - 1] || [], p = S[S.length - 2] || [];
-  const d = i => u[i] != null && p[i] != null ? +(u[i] - p[i]).toFixed(1) : null;
-  return {T: u[1], HR: u[2], ff: u[3], dd: u[4], dT: d(1), dH: d(2), hora: u[0]};
+  const S = (e.serie || []).filter(r => r[1] != null || r[2] != null), a = e.actual || {};
+  const u = S[S.length - 1] || [], p = S[S.length - 2] || [];
+  const T = a.T ?? u[1], HR = a.HR ?? u[2];
+  const d = (x, i) => x != null && p[i] != null ? +(x - p[i]).toFixed(1) : null;
+  return {T, HR, ff: a.ff10 ?? u[3], dd: a.dd10 ?? u[4], fx: a.fx10, dT: d(T, 1), dH: d(HR, 2), hora: a.hora ?? u[0]};
 }
 function nivel(c){ return (c.dT != null && c.dT >= 3) || (c.dH != null && c.dH <= -15) ? 2 : (c.dT != null && c.dT >= 1.5) || (c.dH != null && c.dH <= -8) ? 1 : 0; }
 const COL = ["#8aa0bf", "#ff8c1a", "#ff3b1f"];
@@ -99,45 +115,50 @@ function detalle(k){
   document.querySelectorAll(".est").forEach(x => x.classList.toggle("sel", +x.dataset.k === k));
   $("#det").innerHTML = `<div class="det"><h3>${esc(e.nombre)}</h3><small>${e.codigo} · ${e.alt ?? "—"} m · incendio a ${e.dist} km al ${e.rumbo}${e.a_sotavento ? " · <b style='color:#ff8c1a'>el viento lleva el humo hacia la estación</b>" : ""}</small>
     ${grafico(e)}
-    <div style="display:flex;gap:16px;font-size:13.5px;margin-top:6px"><span>Viento ${c.dd != null ? DIRS[Math.round(c.dd / 45) % 8] : ""} <b>${c.ff ?? "—"}</b> kt</span><span>Último dato ${c.hora ?? "—"} UTC</span></div></div>`;
+    <div style="display:flex;gap:16px;font-size:13.5px;margin-top:6px;flex-wrap:wrap"><span>Ahora: <b>${c.T ?? "—"} °C</b> · <b>${c.HR ?? "—"} %</b></span><span>Viento ${c.dd != null ? DIRS[Math.round(c.dd / 45) % 8] : ""} <b>${c.ff ?? "—"}</b> kt${c.fx != null ? ` (racha ${c.fx} kt)` : ""}</span><span>Dato de las ${c.hora ?? "—"} UTC</span></div></div>`;
   mapa.setView([e.lat, e.lon], Math.max(mapa.getZoom(), 10));
 }
 function pintar(){
+  E = TODAS.filter(e => e.dist <= +$("#radio").value);
   capas.est.clearLayers(); capas.lineas.clearLayers(); capas.fuego.clearLayers();
   // fuego de las últimas 6 h (huella del píxel)
-  if (D){ const t0 = Date.now() - 6 * 3600000;
-    D.focos.filter(f => !f.industrial && ms(f.t) >= t0).forEach(f => {
+  if (D){ const t0 = Date.now() - 24 * 3600000;
+    const rel = f => D.incendios.some(i => i.relevante !== false && Math.abs(i.lat - f.lat) < .08 && Math.abs(i.lon - f.lon) < .1);
+    D.focos.filter(f => !f.industrial && ms(f.t) >= t0 && rel(f)).forEach(f => {
       const h = f.fuente === "GOES-19" ? 1.25 : f.fuente.startsWith("MODIS") ? .5 : .19, dla = h / 111, dlo = h / (111 * Math.cos(f.lat * Math.PI / 180));
-      const m = (Date.now() - ms(f.t)) / 60000, col = m <= 60 ? "#ff3b1f" : "#ff8c1a";
+      const m = (Date.now() - ms(f.t)) / 60000, col = m <= 60 ? "#ff3b1f" : m <= 360 ? "#ff8c1a" : "#c0392b";
       L.rectangle([[f.lat - dla, f.lon - dlo], [f.lat + dla, f.lon + dlo]], {stroke: false, fillColor: col, fillOpacity: f.fuente === "GOES-19" ? .3 : .85}).addTo(capas.fuego);
     }); }
   const res = [0, 0, 0];
   E.forEach((e, k) => {
     const c = cambio(e), n = nivel(c); res[n]++;
-    const html = `<div class="lbl" style="--c:${COL[n]}">${c.T != null ? Math.round(c.T) + "°" : "—"} <small>${c.dT != null ? (c.dT > 0 ? "▲" : c.dT < 0 ? "▼" : "") + Math.abs(c.dT) : ""}</small><br><span style="font-weight:600;color:#9fd3ff">${c.HR != null ? Math.round(c.HR) + "%" : ""}</span></div>`;
+    const html = `<div class="lbl" style="--c:${COL[n]}">${c.T != null ? c.T.toFixed(1) + "°" : "—"} <small>${c.dT != null ? (c.dT > 0 ? "▲" : c.dT < 0 ? "▼" : "") + Math.abs(c.dT) : ""}</small><br><span style="font-weight:600;color:#9fd3ff">${c.HR != null ? Math.round(c.HR) + "%" : ""}</span> <span style="font-weight:600;color:#ffd23f">${c.dd != null ? DIRS[Math.round(c.dd / 45) % 8] + " " : ""}${c.ff != null ? Math.round(c.ff) + " kt" : ""}</span></div>`;
     L.marker([e.lat, e.lon], {icon: L.divIcon({className: "", html, iconSize: [0, 0]})}).on("click", () => detalle(k)).addTo(capas.est);
     // línea al incendio más cercano
     if (D){ const i = D.incendios.filter(i => i.relevante !== false).sort((a, b) => (a.lat - e.lat) ** 2 + (a.lon - e.lon) ** 2 - (b.lat - e.lat) ** 2 - (b.lon - e.lon) ** 2)[0];
       if (i){ e.primera = i.primera; L.polyline([[e.lat, e.lon], [i.lat, i.lon]], {color: COL[n], weight: 1.5, dashArray: "4 4", opacity: .8}).addTo(capas.lineas); } }
   });
-  $("#res").innerHTML = `<div><b>${E.length}</b><span>estaciones a ≤ 30 km de un incendio</span></div><div><b style="color:${COL[2]}">${res[2]}</b><span>con cambio brusco en 1 h</span></div>`;
+  $("#res").innerHTML = `<div><b>${E.length}</b><span>estaciones a ≤ ${$("#radio").value} km de un incendio</span></div><div><b style="color:${COL[2]}">${res[2]}</b><span>con cambio brusco en 1 h</span></div>`;
   $("#lista").innerHTML = E.length ? E.map((e, k) => { const c = cambio(e), n = nivel(c);
     return `<div class="est" data-k="${k}" style="--c:${COL[n]}"><div class="t">Incendio a <b>${e.dist} km</b> al ${e.rumbo}${e.a_sotavento ? " · el humo va hacia la estación" : ""}</div><h3>${esc(e.nombre)}</h3>
       <div class="v"><span><b>${c.T ?? "—"}</b> °C ${c.dT != null ? `<span class="${c.dT > 0 ? "sube" : "baja"}">${c.dT > 0 ? "+" : ""}${c.dT} en 1 h</span>` : ""}</span>
       <span><b>${c.HR ?? "—"}</b> % ${c.dH != null ? `<span class="${c.dH < 0 ? "sube" : "baja"}">${c.dH > 0 ? "+" : ""}${c.dH} en 1 h</span>` : ""}</span>
       <span>${c.dd != null ? DIRS[Math.round(c.dd / 45) % 8] : ""} <b>${c.ff ?? "—"}</b> kt</span></div>
       ${n === 2 ? `<small style="color:#ff8c1a">Cambio brusco en la última hora: puede ser efecto del incendio.</small>` : ""}</div>`; }).join("")
-    : `<p class="vacio">Ninguna estación automática está a menos de 30 km de un incendio relevante de las últimas 6 horas.</p>`;
+    : `<p class="vacio">Ninguna estación automática está a ${$("#radio").value} km o menos de un incendio relevante de las últimas 12 horas.${TODAS.length ? ` Hay ${TODAS.length} a 30 km o menos: amplíe la distancia arriba.` : ""}</p>`;
   if (sel != null && E[sel]) detalle(sel);
   if (primeraVez && E.length){ mapa.fitBounds(L.latLngBounds(E.map(e => [e.lat, e.lon])).pad(.4), {maxZoom: 10}); primeraVez = false; }
 }
 async function cargar(){
-  try { const r = await fetch(API, {cache: "no-store"}); const j = r.ok ? await r.json() : {estaciones: []}; E = (j.estaciones || []).sort((a, b) => a.dist - b.dist);
+  try { const r = await fetch(API, {cache: "no-store"}); const j = r.ok ? await r.json() : {estaciones: []}; TODAS = (j.estaciones || []).sort((a, b) => a.dist - b.dist);
     $("#act").textContent = j.generado ? `Actualizado ${new Date(j.generado).toLocaleTimeString("es-CL", {hour: "2-digit", minute: "2-digit"})} · cada 30 minutos` : "Sin datos todavía"; } catch (e) { E = []; $("#act").textContent = "No se pudo leer las estaciones"; }
   try { const r = await fetch("data.json?t=" + Date.now(), {cache: "no-store"}); D = r.ok ? await r.json() : null; } catch (e) { D = null; }
   pintar();
 }
 document.addEventListener("click", ev => { const x = ev.target.closest(".est"); if (x) detalle(+x.dataset.k); });
+$("#radio").addEventListener("change", () => { sel = null; primeraVez = true; pintar(); });
+$("#fondo").addEventListener("change", fondoGoes);
+fondoGoes(); setInterval(fondoGoes, 10 * 60000);
 cargar(); setInterval(cargar, 5 * 60 * 1000);
 </script>
 </body>

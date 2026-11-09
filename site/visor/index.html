@@ -19,21 +19,25 @@ header h1{margin:0;font-size:17px}header h1 small{display:block;color:var(--mu);
 header nav{display:flex;gap:6px;margin-left:auto}
 header nav a{color:var(--tx);text-decoration:none;font-size:13px;font-weight:600;border:1px solid var(--bd);border-radius:999px;padding:5px 12px}
 header nav a.on{background:var(--oro);color:var(--noche);border-color:var(--oro)}
-main{flex:1;display:grid;grid-template-columns:300px 1fr 340px;min-height:0}
-#prod{border-right:1px solid var(--bd);overflow:auto;padding:12px;display:grid;gap:8px;align-content:start}
+main{flex:1;display:flex;flex-direction:column;min-height:0}
+#prod{display:flex;gap:6px;overflow-x:auto;padding:8px 12px;border-bottom:1px solid var(--bd);align-items:center;flex:0 0 auto}
+#prod h2{white-space:nowrap;margin:0 6px 0 0}
 #prod h2,aside h2{font-size:12.5px;margin:4px 0;color:var(--mu);text-transform:uppercase;letter-spacing:.08em}
-.p{display:grid;grid-template-columns:38px 1fr;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:9px 10px;cursor:pointer;text-align:left;color:var(--tx);font:inherit}
+.p{display:flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--bd);border-radius:999px;padding:5px 12px 5px 5px;cursor:pointer;text-align:left;color:var(--tx);font:inherit;white-space:nowrap;flex:0 0 auto}
 .p:hover{background:#16264a}.p.on{border-color:var(--oro);background:#17264a}
-.p i{width:38px;height:38px;border-radius:8px;display:block}
-.p b{display:block;font-size:14.5px}.p small{color:var(--mu);font-size:12.5px;line-height:1.3;display:block}
-#mapwrap{position:relative;min-height:320px}#mapa{position:absolute;inset:0;background:#0d1418;cursor:crosshair}
+.p i{width:24px;height:24px;border-radius:50%;display:block}
+.p b{display:block;font-size:13.5px}.p small{display:none}
+#mapwrap{position:relative;min-height:320px;flex:1}#mapa{position:absolute;inset:0;background:#0d1418;cursor:crosshair}
 .tl{position:absolute;left:12px;right:12px;bottom:12px;z-index:800;background:rgba(10,20,40,.92);border:1px solid var(--bd);border-radius:12px;padding:9px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .tl button{background:var(--oro);color:var(--noche);border:0;border-radius:7px;font:800 14px inherit;padding:6px 12px;cursor:pointer;min-width:40px}
 .tl input[type=range]{flex:1;min-width:160px;accent-color:var(--oro)}
 .tl .hora{font:700 15px inherit;min-width:150px}
 select{background:var(--panel);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:6px 8px;font:600 13.5px inherit}
-.pista{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:800;background:rgba(10,20,40,.9);border:1px solid var(--oro);border-radius:999px;padding:5px 14px;font-size:13px;color:var(--tx)}
-aside{border-left:1px solid var(--bd);overflow:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+.pista{position:absolute;top:12px;left:40%;transform:translateX(-50%);z-index:800;background:rgba(10,20,40,.9);border:1px solid var(--oro);border-radius:999px;padding:5px 14px;font-size:13px;color:var(--tx)}
+aside{position:absolute;top:12px;right:12px;width:330px;max-height:calc(100% - 100px);overflow:auto;z-index:850;display:flex;flex-direction:column;gap:10px;background:rgba(11,20,36,.94);border:1px solid var(--bd);border-radius:12px;padding:10px}
+aside.min{width:auto;max-height:none}aside.min > :not(.cab){display:none}
+aside .cab{display:flex;justify-content:space-between;align-items:center;gap:10px}aside .cab b{font-size:13px;color:var(--mu);text-transform:uppercase;letter-spacing:.08em}
+aside .cab button{background:var(--panel);color:var(--tx);border:1px solid var(--bd);border-radius:7px;padding:3px 10px;font:700 13px inherit;cursor:pointer}
 .caja{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:12px 14px}
 .caja h3{margin:0 0 6px;font-size:16px}.caja p{margin:6px 0;font-size:14px}
 .ley{display:grid;gap:6px;margin-top:6px}
@@ -43,7 +47,7 @@ aside{border-left:1px solid var(--bd);overflow:auto;padding:14px;display:flex;fl
 #que .sw{display:inline-block;width:18px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:6px;border:1px solid rgba(255,255,255,.3)}
 .mu{color:var(--mu);font-size:12.5px}
 .leaflet-container{font-family:inherit}
-@media (max-width:1100px){main{grid-template-columns:1fr;grid-template-rows:auto 60vh auto}#prod{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));border-right:0;border-bottom:1px solid var(--bd)}aside{border-left:0;border-top:1px solid var(--bd)}}
+@media (max-width:700px){aside{width:calc(100% - 24px)}}
 </style>
 </head>
 <body>
@@ -57,18 +61,19 @@ aside{border-left:1px solid var(--bd);overflow:auto;padding:14px;display:flex;fl
  <div id="mapwrap"><div id="mapa"></div>
   <div class="pista" id="pista">Haga clic en el mapa: le digo qué está viendo</div>
   <div class="tl">
-   <button id="atras" title="Imagen anterior">◀</button><button id="play" title="Animar">▶▶</button><button id="adelante" title="Imagen siguiente">▶︎</button>
+   <button id="atras" title="Imagen anterior">◀</button><button id="play" title="Animar">Animar</button><button id="adelante" title="Imagen siguiente">▶︎</button>
    <select id="rango"><option value="3" selected>Últimas 3 horas</option><option value="12">Últimas 12 horas</option><option value="24">Últimas 24 horas</option></select>
    <span class="hora" id="hframe">—</span>
    <input type="range" id="paso" min="0" max="1" value="1">
   </div>
- </div>
- <aside>
+ <aside id="panel">
+  <div class="cab"><b>Guía</b><button id="plegar" title="Mostrar u ocultar la guía">Ocultar ▸</button></div>
   <div class="caja" id="que"><h3>¿Qué estoy viendo?</h3><p class="mu">Haga clic en cualquier punto del mapa y aquí aparece qué es, según el color de la imagen.</p></div>
   <div class="caja" id="info"></div>
   <p class="mu"><b>Resolución:</b> el satélite está a 36.000 km; cada píxel mide ~2 km en las bandas infrarrojas y ~1 km en la visible. Al acercarse mucho la imagen se ve borrosa porque se están agrandando esos píxeles: para detalle de calles o cerros no alcanza.</p>
   <p class="mu">Imágenes del satélite GOES-19 (NOAA) publicadas por NASA GIBS, con ~40 minutos de atraso. La interpretación por color es una ayuda para aprender a leer la imagen, no un análisis oficial. Iniciativa sin fines de lucro de <a href="https://metotec.cl" style="color:var(--oro)">METOTEC</a>.</p>
  </aside>
+ </div>
 </main>
 <script>
 const $ = s => document.querySelector(s);
@@ -112,7 +117,7 @@ const PROD = [
   ley: [["#5c2e00", [92, 46, 0], "Aire seco que desciende desde muy alto (cerca del chorro)"], ["#5c4801", [92, 72, 1], "Aire seco en altura"], ["#4e6605", [78, 102, 5], "Aire de latitudes medias"], ["#437a36", [67, 122, 54], "Aire cálido y húmedo (tropical)"], ["#434304", [67, 67, 4], "Aire templado"], ["#352d05", [53, 45, 5], "Aire templado y seco"], ["#3d2f8f", [61, 47, 143], "Aire frío (polar)"], ["#a9ca7f", [169, 202, 127], "Nubes altas espesas (frentes, tormentas)"], ["#f0f0f0", [240, 240, 240], "Nubes altas muy espesas"]]},
 ];
 let P = PROD[0];
-$("#prod").innerHTML += PROD.map(p => `<button class="p" data-k="${p.k}"><i style="background:${p.mues}"></i><span><b>${p.nom}</b><small>${p.sub}</small></span></button>`).join("");
+$("#prod").innerHTML += PROD.map(p => `<button class="p" data-k="${p.k}" title="${p.sub}"><i style="background:${p.mues}"></i><span><b>${p.nom}</b><small>${p.sub}</small></span></button>`).join("");
 function info(){
   document.querySelectorAll(".p").forEach(b => b.classList.toggle("on", b.dataset.k === P.k));
   $("#info").innerHTML = `<h3>${P.nom}</h3><p>${P.que}</p><p><b>Sirve para:</b> ${P.sirve}</p><p><b>Ojo:</b> ${P.ojo}</p>
@@ -180,11 +185,13 @@ function ver(i){
   if (l.isLoading && l.isLoading && l.isLoading()){ l.once("load", mostrar); setTimeout(mostrar, 1500); } else mostrar();
   if (i + 1 < FR.length){ const s = capaDe(i + 1); if (!mapa.hasLayer(s)) s.addTo(mapa); }
 }
-function pararAnim(){ if (anim){ clearInterval(anim); anim = null; $("#play").textContent = "▶▶"; } }
-$("#play").addEventListener("click", () => { if (anim) return pararAnim(); $("#play").textContent = "❚❚"; if (iFr >= FR.length - 1) ver(0);
+function pararAnim(){ if (anim){ clearInterval(anim); anim = null; $("#play").textContent = "Animar"; } }
+$("#play").addEventListener("click", () => { if (anim) return pararAnim(); $("#play").textContent = "Pausa"; if (iFr >= FR.length - 1) ver(0);
   anim = setInterval(() => { if (iFr >= FR.length - 1) return pararAnim(); ver(iFr + 1); }, 600); });
 $("#paso").addEventListener("input", ev => { pararAnim(); ver(+ev.target.value); });
 $("#rango").addEventListener("change", armar);
+$("#plegar").addEventListener("click", () => { const m = $("#panel").classList.toggle("min"); $("#plegar").textContent = m ? "◂ Guía" : "Ocultar ▸"; });
+mapa.on("click", () => { if ($("#panel").classList.contains("min")){ $("#panel").classList.remove("min"); $("#plegar").textContent = "Ocultar ▸"; } });
 $("#prod").addEventListener("click", ev => { const b = ev.target.closest(".p"); if (!b) return; P = PROD.find(p => p.k === b.dataset.k); armar(); });
 /* ---------- ¿Qué estoy viendo? (color del píxel → explicación) ---------- */
 let marca = null;

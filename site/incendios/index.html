@@ -65,7 +65,7 @@ h2{font-size:12.5px;margin:6px 0 0;color:var(--mu);text-transform:uppercase;lett
  <div id="mapwrap"><div id="mapa"></div>
   <div class="tl">
    <div class="f1">
-    <button id="atras" title="Imagen anterior">◀</button><button id="play" title="Animar">▶▶</button><button id="adelante" title="Imagen siguiente">▶︎</button>
+    <button id="atras" title="Imagen anterior">◀</button><button id="play" title="Animar">Animar</button><button id="adelante" title="Imagen siguiente">▶︎</button><button id="limpio" title="Ocultar focos, humo y nombres para ver la imagen tal cual">Solo imagen</button>
     <select id="rango" title="Período"><option value="3">Últimas 3 horas</option><option value="12">Últimas 12 horas</option><option value="24" selected>Últimas 24 horas</option><option value="72">Últimas 72 horas</option></select>
     <span class="hora" id="hframe">—</span>
     <select id="fondo" title="Imagen de fondo"><option value="geo">Satélite · color real (humo)</option><option value="fuego">Satélite · fuego (RGB temperatura del fuego)</option><option value="b7">Satélite · banda 7 propia (6 h)</option><option value="ir">Satélite · infrarrojo (banda 13)</option><option value="esri">Mapa base</option></select>
@@ -200,8 +200,8 @@ function marcas(){
   D.focos.forEach(f => { if (f.industrial) return; const t = ms(f.t); if (t >= a && t <= b) set.add(Math.round((t - a) / (b - a) * 200)); });
   $("#marcas").innerHTML = [...set].map(k => `<i style="left:${k / 2}%"></i>`).join("");
 }
-function pararAnim(){ if (anim){ clearInterval(anim); anim = null; $("#play").textContent = "▶▶"; } }
-$("#play").addEventListener("click", () => { if (anim) return pararAnim(); $("#play").textContent = "❚❚"; if (iFr >= FR.length - 1) verFrame(0);
+function pararAnim(){ if (anim){ clearInterval(anim); anim = null; $("#play").textContent = "Animar"; } }
+$("#play").addEventListener("click", () => { if (anim) return pararAnim(); $("#play").textContent = "Pausa"; if (iFr >= FR.length - 1) verFrame(0);
   anim = setInterval(() => { if (iFr >= FR.length - 1){ pararAnim(); return; } verFrame(iFr + 1); }, 650); });
 $("#paso").addEventListener("input", ev => { pararAnim(); verFrame(+ev.target.value); });
 $("#rango").addEventListener("change", () => armarFondo());
@@ -300,6 +300,9 @@ $("#cViento").addEventListener("change", ev => ev.target.checked ? capas.viento.
 $("#cQuem").addEventListener("change", ev => ev.target.checked ? capas.quem.addTo(mapa) : capas.quem.remove());
 $("#cInd").addEventListener("change", ev => ev.target.checked ? capas.ind.addTo(mapa) : capas.ind.remove());
 cargar(); setInterval(cargar, 5 * 60 * 1000);
+$("#limpio").addEventListener("click", () => { const on = $("#limpio").classList.toggle("on");
+  ["overlayPane", "markerPane", "tooltipPane", "etiquetas"].forEach(n => mapa.getPane(n).style.display = on ? "none" : "");
+  $("#limpio").textContent = on ? "Mostrar focos" : "Solo imagen"; });
 $("#atras").addEventListener("click", () => { pararAnim(); if (iFr > 0) verFrame(iFr - 1); });
 $("#adelante").addEventListener("click", () => { pararAnim(); if (iFr < FR.length - 1) verFrame(iFr + 1); });
 document.addEventListener("keydown", ev => { if (ev.target.tagName === "INPUT" || ev.target.tagName === "SELECT") return;
