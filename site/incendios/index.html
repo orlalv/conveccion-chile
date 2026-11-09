@@ -206,7 +206,7 @@ async function armarFondo(){
     else if (fondo !== "hd") FIN = await ultimaDisponible(GIBS[fondo], c);
   }
   $("#nota").textContent = nota;
-  $("#rango").disabled = !!PROPIO[fondo];
+  $("#rango").title = PROPIO[fondo] ? "Período de los focos (las imágenes propias cubren las últimas 6 horas)" : "Período";
   FR = cuadros();
   if (!FR.length) FR = [new Date()];
   $("#paso").max = Math.max(0, FR.length - 1);
@@ -237,7 +237,7 @@ function pararAnim(){ if (anim){ clearInterval(anim); anim = null; $("#play").te
 $("#play").addEventListener("click", () => { if (anim) return pararAnim(); $("#play").textContent = "Pausa"; if (iFr >= FR.length - 1) verFrame(0);
   anim = setInterval(() => { if (iFr >= FR.length - 1){ pararAnim(); return; } verFrame(iFr + 1); }, 650); });
 $("#paso").addEventListener("input", ev => { pararAnim(); verFrame(+ev.target.value); });
-$("#rango").addEventListener("change", () => armarFondo());
+$("#rango").addEventListener("change", () => PROPIO[fondo] ? (marcas(), pintarFuego()) : armarFondo());
 $("#fondo").addEventListener("change", ev => { fondo = ev.target.value; armarFondo(); });
 
 /* ---------- fuego: huellas de los focos y contorno de cada incendio ---------- */
@@ -260,7 +260,7 @@ function pintarFuego(){
   const ultimo = iFr === FR.length - 1;
   const paso = PROPIO[fondo] ? 10 : fondo === "hd" ? 1440 : (PASO[$("#rango").value] || 10);
   const tf = ultimo || !FR.length ? Date.now() : FR[iFr].getTime() + paso * 60000;
-  const t0 = FR.length > 1 ? FR[0].getTime() - 6 * 3600000 : Date.now() - 72 * 3600000;
+  const t0 = PROPIO[fondo] ? Date.now() - (+$("#rango").value + 6) * 3600000 : FR.length > 1 ? FR[0].getTime() - 6 * 3600000 : Date.now() - 72 * 3600000;   // imágenes propias: 6 h; focos: el período elegido
   const chicos = $("#cChicos").checked;
   const vivos = D.focos.filter(f => { const t = ms(f.t); return t <= tf && t >= t0; });
   vivos.sort((a, b) => ms(a.t) - ms(b.t)).forEach(f => {          // lo más reciente queda encima
