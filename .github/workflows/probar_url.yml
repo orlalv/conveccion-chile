@@ -3,10 +3,11 @@ on:
   workflow_dispatch:
     inputs:
       url: {description: "URL", required: true}
+      buscar: {description: "texto a buscar", required: false, default: ""}
 jobs:
   p:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          curl -s -D - -o r.txt "${{ inputs.url }}"; echo; head -c 1500 r.txt; echo; python3 -c "
-          import json;d=json.load(open('r.txt'));print('filas',len(d.get('filas',[])),'faltan',d.get('faltan'))" || true
+          curl -s -D h.txt -o r.txt "${{ inputs.url }}"; grep -iE "^HTTP|cache|etag|age:|cf-" h.txt; wc -c r.txt
+          if [ -n "${{ inputs.buscar }}" ]; then grep -o "${{ inputs.buscar }}.\{0,80\}" r.txt | head -5; fi
